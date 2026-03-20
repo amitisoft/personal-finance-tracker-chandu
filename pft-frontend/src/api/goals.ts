@@ -19,6 +19,22 @@ export async function updateGoal(
   return res.data;
 }
 
+export async function contributeGoal(
+  id: string,
+  payload: { amount: number; accountId?: string | null; date: string; note?: string | null },
+) {
+  const res = await http.post<Goal>(`/api/goals/${id}/contribute`, payload);
+  return res.data;
+}
+
+export async function withdrawGoal(
+  id: string,
+  payload: { amount: number; accountId?: string | null; date: string; note?: string | null },
+) {
+  const res = await http.post<Goal>(`/api/goals/${id}/withdraw`, payload);
+  return res.data;
+}
+
 export async function deleteGoal(id: string) {
   await http.delete(`/api/goals/${id}`);
 }

@@ -11,6 +11,7 @@ import {
   DialogTitle,
   Grid,
   IconButton,
+  InputAdornment,
   LinearProgress,
   MenuItem,
   Stack,
@@ -19,21 +20,48 @@ import {
 } from "@mui/material";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
+import AddIcon from "@mui/icons-material/Add";
+import RemoveIcon from "@mui/icons-material/Remove";
 import SavingsRoundedIcon from "@mui/icons-material/SavingsRounded";
 import FlagRoundedIcon from "@mui/icons-material/FlagRounded";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { createGoal, deleteGoal, listGoals, updateGoal } from "../../api/goals";
+import { contributeGoal, createGoal, deleteGoal, listGoals, updateGoal, withdrawGoal } from "../../api/goals";
 import { listAccounts } from "../../api/accounts";
 import { queryClient } from "../../queryClient";
 import type { Goal } from "../../api/types";
-import { formatMoney } from "../../utils/money";
+import { formatMoney, getCurrencySymbol } from "../../utils/money";
 import { formatDisplayDate } from "../../utils/dates";
 import { PageHero } from "../../components/PageHero";
 
 type FormState = { id?: string; name: string; targetAmount: number; targetDate: string; status: string };
+type AdjustState = {
+  goalId: string;
+  goalName: string;
+  mode: "contribute" | "withdraw";
+  amount: string;
+  accountId: string;
+  date: string;
+  note: string;
+};
 
 function defaultForm(): FormState {
   return { name: "", targetAmount: 0, targetDate: "", status: "active" };
+}
+
+function todayIso() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function defaultAdjust(goal: Goal, mode: "contribute" | "withdraw"): AdjustState {
+  return {
+    goalId: goal.id,
+    goalName: goal.name,
+    mode,
+    amount: "",
+    accountId: "",
+    date: todayIso(),
+    note: "",
+  };
 }
 
 function errorMessage(err: unknown) {
@@ -62,9 +90,14 @@ export function GoalsPage() {
   const [confirm, setConfirm] = useState<{ id: string; label: string } | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(() => defaultForm());
+  const [adjust, setAdjust] = useState<AdjustState | null>(null);
   const isEdit = !!form.id;
+  const adjustCountryCode = adjust?.accountId
+    ? (accounts.data ?? []).find((account) => account.id === adjust.accountId)?.countryCode ?? displayCountryCode
+    : displayCountryCode;
 
   const canSubmit = useMemo(() => form.name.trim() && form.targetAmount > 0, [form]);
+  const canAdjust = useMemo(() => !!adjust && Number(adjust.amount) > 0 && !!adjust.date, [adjust]);
 
   const save = useMutation({
     mutationFn: async () => {
@@ -87,6 +120,28 @@ export function GoalsPage() {
       setSubmitError(null);
       setForm(defaultForm());
       await queryClient.invalidateQueries({ queryKey: ["goals"] });
+    },
+    onError: (err) => setSubmitError(errorMessage(err)),
+  });
+
+  const adjustMutation = useMutation({
+    mutationFn: async () => {
+      const payload = {
+        amount: Number(adjust!.amount),
+        accountId: adjust!.accountId || null,
+        date: adjust!.date,
+        note: adjust!.note || null,
+      };
+
+      if (adjust!.mode === "contribute") return contributeGoal(adjust!.goalId, payload);
+      return withdrawGoal(adjust!.goalId, payload);
+    },
+    onSuccess: async () => {
+      setAdjust(null);
+      setSubmitError(null);
+      await queryClient.invalidateQueries({ queryKey: ["goals"] });
+      await queryClient.invalidateQueries({ queryKey: ["accounts"] });
+      await queryClient.invalidateQueries({ queryKey: ["transactions"] });
     },
     onError: (err) => setSubmitError(errorMessage(err)),
   });
@@ -116,6 +171,11 @@ export function GoalsPage() {
       status: goal.status ?? "active",
     });
     setOpen(true);
+  };
+
+  const openAdjust = (goal: Goal, mode: "contribute" | "withdraw") => {
+    setSubmitError(null);
+    setAdjust(defaultAdjust(goal, mode));
   };
 
   return (
@@ -237,6 +297,28 @@ export function GoalsPage() {
                       </Typography>
                     </Stack>
                   </Stack>
+
+                  <Stack direction="row" spacing={1}>
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      startIcon={<AddIcon />}
+                      onClick={() => openAdjust(goal, "contribute")}
+                      sx={{ flex: 1 }}
+                    >
+                      Contribute
+                    </Button>
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      color="inherit"
+                      startIcon={<RemoveIcon />}
+                      onClick={() => openAdjust(goal, "withdraw")}
+                      sx={{ flex: 1 }}
+                    >
+                      Withdraw
+                    </Button>
+                  </Stack>
                 </CardContent>
               </Card>
             </Grid>
@@ -276,6 +358,67 @@ export function GoalsPage() {
           </Button>
           <Button variant="contained" disabled={!canSubmit || save.isPending} onClick={() => save.mutate()}>
             {save.isPending ? "Saving..." : "Save"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={!!adjust} onClose={() => setAdjust(null)} fullWidth maxWidth="sm">
+        <DialogTitle>{adjust?.mode === "withdraw" ? "Withdraw From Goal" : "Contribute To Goal"}</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <Typography color="text.secondary">
+              {adjust?.mode === "withdraw" ? "Update saved amount for" : "Add savings toward"}{" "}
+              <Box component="span" sx={{ fontWeight: 700, color: "text.primary" }}>
+                {adjust?.goalName}
+              </Box>
+              .
+            </Typography>
+            <TextField
+              label="Amount"
+              type="number"
+              value={adjust?.amount ?? ""}
+              onChange={(e) => setAdjust((state) => (state ? { ...state, amount: e.target.value } : state))}
+              InputProps={{ startAdornment: <InputAdornment position="start">{getCurrencySymbol(adjustCountryCode)}</InputAdornment> }}
+            />
+            <TextField
+              select
+              label="Account (optional)"
+              value={adjust?.accountId ?? ""}
+              onChange={(e) => setAdjust((state) => (state ? { ...state, accountId: e.target.value } : state))}
+            >
+              <MenuItem value="">No linked account</MenuItem>
+              {(accounts.data ?? []).map((account) => (
+                <MenuItem key={account.id} value={account.id}>
+                  {account.name}
+                </MenuItem>
+              ))}
+            </TextField>
+            <TextField
+              label="Date"
+              type="date"
+              InputLabelProps={{ shrink: true }}
+              value={adjust?.date ?? ""}
+              onChange={(e) => setAdjust((state) => (state ? { ...state, date: e.target.value } : state))}
+            />
+            <TextField
+              label="Note"
+              value={adjust?.note ?? ""}
+              onChange={(e) => setAdjust((state) => (state ? { ...state, note: e.target.value } : state))}
+              multiline
+              minRows={2}
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setAdjust(null)} disabled={adjustMutation.isPending}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            disabled={!canAdjust || adjustMutation.isPending}
+            onClick={() => adjustMutation.mutate()}
+          >
+            {adjustMutation.isPending ? "Saving..." : adjust?.mode === "withdraw" ? "Withdraw" : "Contribute"}
           </Button>
         </DialogActions>
       </Dialog>
