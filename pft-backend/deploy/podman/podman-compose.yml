@@ -1,0 +1,62 @@
+name: pft
+
+services:
+  postgres:
+    image: docker.io/postgres:16-alpine
+    environment:
+      POSTGRES_USER: pft
+      POSTGRES_PASSWORD: pft
+      POSTGRES_DB: pft
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      pftnet:
+        aliases: ["postgres"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pft -d pft"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  backend:
+    build:
+      context: ../..
+      dockerfile: Containerfile
+    environment:
+      ASPNETCORE_URLS: http://0.0.0.0:8080
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__Default: Host=postgres;Port=5432;Database=pft;Username=pft;Password=pft
+      Jwt__Issuer: pft
+      Jwt__Audience: pft
+      Jwt__SigningKey: CHANGE_ME_DEV_ONLY_CHANGE_ME_DEV_ONLY_32+CHARS
+      Jwt__AccessTokenMinutes: "120"
+      Jwt__RefreshTokenDays: "30"
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+    networks:
+      pftnet:
+        aliases: ["backend"]
+
+  frontend:
+    build:
+      context: ../../../pft-frontend
+      dockerfile: Containerfile
+      args:
+        VITE_API_BASE_URL: ""
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - pftnet
+
+volumes:
+  pgdata:
+
+networks:
+  pftnet:
