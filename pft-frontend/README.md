@@ -29,7 +29,7 @@ Azure deployment notes for the frontend are in `deploy/azure/README.md`.
 
 For an individual Azure deployment, build the frontend with:
 ```
-VITE_API_BASE_URL=https://<your-backend-host>
+VITE_API_BASE_URL=https://pocket-finance-backend-avbcd9aqg5addmdq.centralindia-01.azurewebsites.net
 ```
 
 The frontend deployment only needs the backend URL at build time.
