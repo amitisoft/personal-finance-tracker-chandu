@@ -1,3 +1,6 @@
 export const config = {
-  apiBaseUrl: import.meta.env.VITE_API_BASE_URL ?? window.location.origin,
+  apiBaseUrl:
+    typeof import.meta.env.VITE_API_BASE_URL === "string" && import.meta.env.VITE_API_BASE_URL.trim()
+      ? import.meta.env.VITE_API_BASE_URL.trim()
+      : window.location.origin,
 };

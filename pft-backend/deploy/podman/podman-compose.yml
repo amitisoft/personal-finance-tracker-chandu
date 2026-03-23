@@ -8,7 +8,7 @@ services:
     environment:
       ASPNETCORE_URLS: http://0.0.0.0:8080
       ASPNETCORE_ENVIRONMENT: Development
-      ConnectionStrings__Default: Host=pocket-finance-db.postgres.database.azure.com;Port=5432;Database=postgres;Username=pocketFinance;Password=@Chandudp2211;SSL Mode=Require;Trust Server Certificate=true
+      ConnectionStrings__Default: Host=localhost;Port=55432;Database=pft_dev;Username=pft;Password=pft_dev
       Jwt__Issuer: pft
       Jwt__Audience: pft
       Jwt__SigningKey: CHANGE_ME_DEV_ONLY_CHANGE_ME_DEV_ONLY_32+CHARS

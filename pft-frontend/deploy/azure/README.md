@@ -11,8 +11,11 @@ Deploy `pft-frontend` as its own Azure-hosted app.
 - `VITE_API_BASE_URL=https://<your-backend-host>`
 
 ## Azure App Service
-- Deploy the built container on port `80`
-- No database or JWT secrets are needed in the frontend app
+- Option A (recommended for App Service): deploy the static build output (`dist/`) using GitHub Actions workflow `.github/workflows/main_pocket-finance-frontend.yml`
+- Set a GitHub repo variable `VITE_API_BASE_URL` to `https://<your-backend-host>`
+- Configure the App Service startup command to serve SPA static files from `wwwroot` (example): `pm2 serve /home/site/wwwroot --no-daemon --spa`
+- Option B: deploy the built container on port `80` (requires App Service for Containers)
+- No database or JWT secrets are needed in the frontend app (only the backend URL at build time)
 
 ## Azure Static Web Apps
 - Build with the same `VITE_API_BASE_URL`
