@@ -15,6 +15,8 @@ import {
   TableHead,
   TableRow,
   Typography,
+  useMediaQuery,
+  useTheme,
 } from "@mui/material";
 import { useQuery } from "@tanstack/react-query";
 import { Link as RouterLink } from "react-router-dom";
@@ -53,6 +55,9 @@ function errorMessage(err: unknown) {
 }
 
 export function DashboardPage() {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+
   const accounts = useQuery({ queryKey: ["accounts"], queryFn: listAccounts });
   const goals = useQuery({ queryKey: ["goals"], queryFn: listGoals });
 
@@ -116,6 +121,7 @@ export function DashboardPage() {
       return {
         period,
         label: formatMonthLabel(currentYear, monthIndex),
+        shortLabel: formatMonthLabel(currentYear, monthIndex).slice(0, 1),
         income: point?.income ?? 0,
         expense: point?.expense ?? 0,
       };
@@ -137,6 +143,11 @@ export function DashboardPage() {
   const upcoming = [...(recurring.data ?? [])]
     .sort((a, b) => a.nextRunDate.localeCompare(b.nextRunDate))
     .slice(0, 5);
+
+  const trendAxisWidth = isMobile ? 58 : 110;
+  const trendChartHeight = isMobile ? 300 : 360;
+  const trendXAxisKey = isMobile ? "shortLabel" : "label";
+  const trendLegendStyle = isMobile ? { paddingTop: 14, fontSize: 13 } : { paddingTop: 10 };
 
   return (
     <Box>
@@ -318,15 +329,34 @@ export function DashboardPage() {
               <Typography sx={{ mb: 2 }} fontWeight={900}>
                 {`Income vs Expense Trend (${currentYear})`}
               </Typography>
-              <Box sx={{ height: 360 }}>
+              <Box
+                sx={{
+                  height: trendChartHeight,
+                  mx: isMobile ? -1 : 0,
+                  "& .recharts-cartesian-axis-tick-value": {
+                    fill: "text.secondary",
+                    fontSize: isMobile ? 11 : 12,
+                  },
+                  "& .recharts-legend-wrapper": {
+                    inset: "auto 0 0 0 !important",
+                  },
+                }}
+              >
                 <ResponsiveContainer>
-                  <LineChart data={points} margin={{ top: 8, right: 12, left: 0, bottom: 8 }}>
+                  <LineChart data={points} margin={{ top: 8, right: isMobile ? 0 : 12, left: isMobile ? -18 : 0, bottom: isMobile ? 24 : 8 }}>
                     <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="rgba(15,23,42,0.10)" />
-                    <XAxis dataKey="label" tickLine={false} axisLine={false} interval={0} minTickGap={0} />
+                    <XAxis
+                      dataKey={trendXAxisKey}
+                      tickLine={false}
+                      axisLine={false}
+                      interval={0}
+                      minTickGap={isMobile ? 10 : 0}
+                      tickMargin={isMobile ? 10 : 8}
+                    />
                     <YAxis
                       tickLine={false}
                       axisLine={false}
-                      width={110}
+                      width={trendAxisWidth}
                       tickFormatter={(value) => formatMoney(Number(value), primaryCountryCode)}
                     />
                     <Tooltip
@@ -341,7 +371,7 @@ export function DashboardPage() {
                         boxShadow: "0px 12px 28px rgba(16, 24, 40, 0.10)",
                       }}
                     />
-                    <Legend />
+                    <Legend wrapperStyle={trendLegendStyle} iconSize={isMobile ? 10 : 12} />
                     <Line type="monotone" dataKey="income" name="Income" stroke="#2e7d32" strokeWidth={3} dot={{ r: 4, strokeWidth: 2, fill: "#ffffff" }} activeDot={{ r: 6 }} />
                     <Line type="monotone" dataKey="expense" name="Expense" stroke="#d32f2f" strokeWidth={3} dot={{ r: 4, strokeWidth: 2, fill: "#ffffff" }} activeDot={{ r: 6 }} />
                   </LineChart>

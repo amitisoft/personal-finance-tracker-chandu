@@ -1,5 +1,6 @@
-﻿using System.Text;
+using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Pft.Data;
@@ -18,6 +19,7 @@ builder.Services.AddDbContext<PftDbContext>(options =>
     {
         throw new InvalidOperationException("Missing connection string: ConnectionStrings:Default");
     }
+
     options.UseNpgsql(cs, o => o.EnableRetryOnFailure());
 });
 
@@ -33,16 +35,29 @@ builder.Services.AddScoped<INotificationsService, NotificationsService>();
 builder.Services.AddHostedService<DatabaseInitializer>();
 builder.Services.AddHostedService<RecurringTransactionWorker>();
 
+var corsOrigins = GetCorsOrigins(builder.Configuration);
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("frontend", policy =>
     {
-        policy
-            .AllowAnyHeader()
-            .AllowAnyMethod()
-            .AllowCredentials()
-            .SetIsOriginAllowed(_ => true);
+        policy.AllowAnyHeader().AllowAnyMethod().AllowCredentials();
+
+        if (corsOrigins.Length > 0)
+        {
+            policy.WithOrigins(corsOrigins);
+            return;
+        }
+
+        policy.SetIsOriginAllowed(_ => true);
     });
+});
+
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
 });
 
 var jwtSection = builder.Configuration.GetSection("Jwt");
@@ -73,6 +88,7 @@ builder.Services.AddAuthorization();
 
 var app = builder.Build();
 
+app.UseForwardedHeaders();
 app.UseExceptionHandler("/error");
 
 app.UseSwagger();
@@ -84,3 +100,27 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.Run();
+
+static string[] GetCorsOrigins(IConfiguration configuration)
+{
+    var configuredOrigins = configuration.GetSection("Cors:AllowedOrigins").Get<string[]>();
+    if (configuredOrigins is { Length: > 0 })
+    {
+        return configuredOrigins
+            .Where(origin => !string.IsNullOrWhiteSpace(origin))
+            .Select(origin => origin.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    var rawOrigins = configuration["Cors:AllowedOrigins"];
+    if (string.IsNullOrWhiteSpace(rawOrigins))
+    {
+        return [];
+    }
+
+    return rawOrigins
+        .Split([',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .ToArray();
+}

@@ -1,8 +1,7 @@
-﻿param(
+param(
   [switch]$Build = $true,
   [switch]$ShowLogs,
-  [switch]$Clean,
-  [switch]$ResetDb
+  [switch]$Clean
 )
 
 $ErrorActionPreference = 'Stop'
@@ -29,10 +28,7 @@ try {
 }
 
 if ($Clean) {
-  $downArgs = @('down','--remove-orphans')
-  if ($ResetDb) { $downArgs += @('--volumes') }
-
-  $code = Invoke-Compose @downArgs
+  $code = Invoke-Compose down --remove-orphans
   if ($code -ne 0) {
     Write-Host "WARN: compose down returned exit code $code (often fine if nothing was running)." -ForegroundColor Yellow
   }
@@ -53,7 +49,6 @@ Invoke-Compose ps | Out-Null
 if ($ShowLogs) {
   Invoke-Compose logs --tail 200 frontend | Out-Null
   Invoke-Compose logs --tail 200 backend | Out-Null
-  Invoke-Compose logs --tail 200 postgres | Out-Null
 }
 
 Write-Host "Frontend: http://localhost:3000" -ForegroundColor Green

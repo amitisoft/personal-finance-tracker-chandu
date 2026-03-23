@@ -13,6 +13,9 @@ Create `pft-backend/src/Pft.Api/appsettings.Development.json`:
   "ConnectionStrings": {
     "Default": "Host=localhost;Port=5432;Database=pft;Username=pft;Password=pft"
   },
+  "Cors": {
+    "AllowedOrigins": ["http://localhost:5173"]
+  },
   "Jwt": {
     "Issuer": "pft",
     "Audience": "pft",
@@ -33,11 +36,27 @@ Open:
 - Health: `http://localhost:8080/healthz`
 
 ## Podman deployment
-Full-stack Podman deployment files now live in `pft-backend/deploy/podman/`.
+Podman deployment files now live in `pft-backend/deploy/podman/`.
+The backend container uses the Azure Database for PostgreSQL connection string configured in `deploy/podman/podman-compose.yml`.
 
 From the repo root:
 - PowerShell: `./pft-backend/deploy/podman/podman-up.ps1`
 - Bash: `./pft-backend/deploy/podman/podman-up.sh`
+
+## Azure deployment
+Azure deployment notes for the backend are in `deploy/azure/README.md`.
+
+For an individual Azure deployment, configure these app settings:
+- `ASPNETCORE_ENVIRONMENT=Production`
+- `ConnectionStrings__Default`
+- `Jwt__Issuer`
+- `Jwt__Audience`
+- `Jwt__SigningKey`
+- `Jwt__AccessTokenMinutes`
+- `Jwt__RefreshTokenDays`
+- `Cors__AllowedOrigins__0=https://<your-frontend-host>`
+
+If you deploy the container to Azure App Service, set `WEBSITES_PORT=8080`.
 
 ## Auth validation
 - Email must be a valid email address.

@@ -1,9 +1,10 @@
 # Podman Deployment
 
-This directory contains the Podman setup for the full stack:
-- PostgreSQL
+This directory contains the Podman setup for the application stack:
 - ASP.NET Core backend
 - Nginx-served React frontend
+
+The backend connects to Azure Database for PostgreSQL using the connection string in `podman-compose.yml`.
 
 ## Location
 Deployment files now live under `pft-backend/deploy/podman/` so backend runtime and deployment assets are grouped together.
@@ -11,6 +12,7 @@ Deployment files now live under `pft-backend/deploy/podman/` so backend runtime 
 ## Prerequisites
 - Podman installed
 - On Windows: `podman machine start`
+- Network access from the backend container to Azure Database for PostgreSQL
 
 ## Start
 From the repo root:
@@ -23,7 +25,6 @@ From `pft-backend/deploy/podman`:
 
 Options:
 - `-Clean` recreates containers
-- `-ResetDb` removes the Postgres volume when used with `-Clean`
 - `-ShowLogs` prints recent logs after startup
 
 ## Stop
@@ -37,7 +38,6 @@ Options:
 - Backend health: `http://localhost:8080/healthz`
 
 ## Notes
-- Database schema is initialized from `db/init.sql` on first boot.
 - JWT settings are in `podman-compose.yml`.
 - Access tokens expire after `Jwt__AccessTokenMinutes` (120 minutes by default).
 
@@ -45,4 +45,3 @@ Options:
 - Status: `podman compose -f podman-compose.yml ps`
 - Frontend logs: `podman compose -f podman-compose.yml logs --tail 200 frontend`
 - Backend logs: `podman compose -f podman-compose.yml logs --tail 200 backend`
-- Postgres logs: `podman compose -f podman-compose.yml logs --tail 200 postgres`
