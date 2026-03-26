@@ -8,6 +8,7 @@ import {
   Divider,
   Grid,
   LinearProgress,
+  CircularProgress,
   Stack,
   Table,
   TableBody,
@@ -21,6 +22,11 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { Link as RouterLink } from "react-router-dom";
 import AddIcon from "@mui/icons-material/Add";
+import FavoriteRoundedIcon from "@mui/icons-material/FavoriteRounded";
+import AccountBalanceWalletRoundedIcon from "@mui/icons-material/AccountBalanceWalletRounded";
+import TrendingUpRoundedIcon from "@mui/icons-material/TrendingUpRounded";
+import TrendingDownRoundedIcon from "@mui/icons-material/TrendingDownRounded";
+import SavingsRoundedIcon from "@mui/icons-material/SavingsRounded";
 import {
   Line,
   LineChart,
@@ -40,10 +46,13 @@ import { listGoals } from "../../api/goals";
 import { listRecurring } from "../../api/recurring";
 import { listTransactions } from "../../api/transactions";
 import { categorySpend, incomeVsExpense } from "../../api/reports";
+import { forecastDaily, forecastMonth } from "../../api/forecast";
+import { getHealthScore } from "../../api/insights";
 import { categoryColor } from "../../utils/categoryColors";
 import { formatMoney } from "../../utils/money";
 import { formatDisplayDate, formatMonthLabel } from "../../utils/dates";
 import { renderCategoryIcon } from "../../components/CategoryIcon";
+import { PageHero } from "../../components/PageHero";
 
 function errorMessage(err: unknown) {
   const anyErr = err as any;
@@ -54,12 +63,67 @@ function errorMessage(err: unknown) {
   return "Something went wrong. Please try again.";
 }
 
+type KpiCardProps = {
+  title: string;
+  value: string;
+  caption?: string;
+  accent: string;
+  icon: JSX.Element;
+};
+
+function KpiCard({ title, value, caption, accent, icon }: KpiCardProps) {
+  return (
+    <Card
+      sx={{
+        height: "100%",
+        border: "1px solid rgba(98, 122, 204, 0.12)",
+        background: "linear-gradient(135deg, rgba(255,255,255,0.96) 0%, rgba(246,249,255,0.98) 55%, rgba(255,255,255,0.96) 100%)",
+        boxShadow: "0px 18px 40px rgba(68,93,180,0.06)",
+        transition: "transform 160ms ease, box-shadow 160ms ease",
+        "&:hover": { transform: "translateY(-1px)", boxShadow: "0px 22px 50px rgba(68,93,180,0.10)" },
+      }}
+    >
+      <CardContent>
+        <Stack direction="row" justifyContent="space-between" spacing={2} alignItems="flex-start">
+          <Box sx={{ minWidth: 0 }}>
+            <Typography color="text.secondary" variant="body2">
+              {title}
+            </Typography>
+            <Typography variant="h4" sx={{ fontWeight: 900, color: accent, mt: 0.5 }}>
+              {value}
+            </Typography>
+            {caption ? (
+              <Typography color="text.secondary" variant="body2" sx={{ mt: 0.5 }}>
+                {caption}
+              </Typography>
+            ) : null}
+          </Box>
+          <Box
+            sx={{
+              width: 44,
+              height: 44,
+              borderRadius: 3,
+              display: "grid",
+              placeItems: "center",
+              bgcolor: "rgba(98, 122, 204, 0.10)",
+              color: accent,
+              flex: "0 0 auto",
+            }}
+          >
+            {icon}
+          </Box>
+        </Stack>
+      </CardContent>
+    </Card>
+  );
+}
+
 export function DashboardPage() {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
 
   const accounts = useQuery({ queryKey: ["accounts"], queryFn: listAccounts });
-  const goals = useQuery({ queryKey: ["goals"], queryFn: listGoals });
+  const goals = useQuery({ queryKey: ["goals"], queryFn: () => listGoals() });
 
   const expenseSpend = useQuery({
     queryKey: ["reports", "category-spend", "expense"],
@@ -87,6 +151,10 @@ export function DashboardPage() {
 
   const recurring = useQuery({ queryKey: ["recurring"], queryFn: listRecurring });
 
+  const healthScore = useQuery({ queryKey: ["insights", "health-score"], queryFn: getHealthScore });
+  const monthForecast = useQuery({ queryKey: ["forecast", "month"], queryFn: () => forecastMonth() });
+  const dailyForecast = useQuery({ queryKey: ["forecast", "daily"], queryFn: () => forecastDaily() });
+
   const isPending =
     accounts.isPending ||
     goals.isPending ||
@@ -94,10 +162,22 @@ export function DashboardPage() {
     incomeSpend.isPending ||
     incomeExpense.isPending ||
     recent.isPending ||
-    recurring.isPending;
+    recurring.isPending ||
+    healthScore.isPending ||
+    monthForecast.isPending ||
+    dailyForecast.isPending;
 
   const loadError =
-    accounts.error ?? goals.error ?? expenseSpend.error ?? incomeSpend.error ?? incomeExpense.error ?? recent.error ?? recurring.error;
+    accounts.error ??
+    goals.error ??
+    expenseSpend.error ??
+    incomeSpend.error ??
+    incomeExpense.error ??
+    recent.error ??
+    recurring.error ??
+    healthScore.error ??
+    monthForecast.error ??
+    dailyForecast.error;
 
   const accountById = useMemo(
     () => new Map((accounts.data ?? []).map((account) => [account.id, account])),
@@ -134,64 +214,80 @@ export function DashboardPage() {
   const expense = currentPoint?.expense ?? 0;
   const net = points.reduce((sum, point) => sum + point.income - point.expense, 0);
 
+  const periodIncome = healthScore.data?.details?.incomeTotal ?? income;
+  const periodExpense = healthScore.data?.details?.expenseTotal ?? expense;
+
+  const healthValue = typeof healthScore.data?.score === "number" ? healthScore.data.score : null;
+  const healthPct = Math.max(0, Math.min(100, healthValue ?? 0));
+  const healthCondition =
+    healthPct >= 80 ? "Good" : healthPct >= 60 ? "Medium" : healthPct >= 40 ? "Needs work" : "Poor";
+  const healthColor =
+    healthPct >= 80 ? "success.main" : healthPct >= 60 ? "info.main" : healthPct >= 40 ? "warning.main" : "error.main";
+
   const totalGoalTarget = (goals.data ?? []).reduce((acc, goal) => acc + goal.targetAmount, 0);
   const totalGoalCurrent = (goals.data ?? []).reduce((acc, goal) => acc + goal.currentAmount, 0);
   const goalPct = totalGoalTarget > 0 ? Math.round((totalGoalCurrent / totalGoalTarget) * 100) : 0;
 
   const topExpenseCategories = [...expenseItems].sort((a, b) => b.totalExpense - a.totalExpense).slice(0, 4);
   const topIncomeCategories = [...incomeItems].sort((a, b) => b.totalExpense - a.totalExpense).slice(0, 4);
-  const upcoming = [...(recurring.data ?? [])]
-    .sort((a, b) => a.nextRunDate.localeCompare(b.nextRunDate))
-    .slice(0, 5);
+
+  const upcomingRows = useMemo(() => {
+    const forecast = [...(monthForecast.data?.upcomingExpenses ?? [])]
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .slice(0, 5)
+      .map((item) => ({
+        key: `forecast-${item.date}-${item.title}`,
+        date: item.date,
+        title: item.title,
+        meta: item.source,
+        amount: item.amount,
+        accountId: item.accountId ?? null,
+      }));
+
+    if (forecast.length > 0) return forecast;
+
+    return [...(recurring.data ?? [])]
+      .sort((a, b) => a.nextRunDate.localeCompare(b.nextRunDate))
+      .slice(0, 5)
+      .map((item) => ({
+        key: `recurring-${item.id}`,
+        date: item.nextRunDate,
+        title: item.title,
+        meta: item.frequency,
+        amount: item.amount,
+        accountId: item.accountId ?? null,
+      }));
+  }, [monthForecast.data?.upcomingExpenses, recurring.data]);
 
   const trendAxisWidth = isMobile ? 58 : 110;
   const trendChartHeight = isMobile ? 300 : 360;
   const trendXAxisKey = isMobile ? "shortLabel" : "label";
   const trendLegendStyle = isMobile ? { paddingTop: 14, fontSize: 13 } : { paddingTop: 10 };
 
+  const forecastPoints = (dailyForecast.data?.points ?? []).map((p) => ({
+    date: p.date.slice(5),
+    balance: p.projectedBalance,
+  }));
+
+  const panelSx = {
+    height: "100%",
+    border: "1px solid rgba(98, 122, 204, 0.12)",
+    backgroundColor: "#ffffff",
+    backgroundImage: "none",
+    boxShadow: "0px 18px 40px rgba(68,93,180,0.06)",
+  };
+
   return (
     <Box>
-      <Card
-        sx={{
-          mb: 3,
-          background: "linear-gradient(135deg, #16325c 0%, #24477c 50%, #305f9a 100%)",
-          color: "common.white",
-          border: "1px solid rgba(255,255,255,0.14)",
-        }}
-      >
-        <CardContent sx={{ py: 3.5 }}>
-          <Stack
-            direction={{ xs: "column", md: "row" }}
-            alignItems={{ xs: "stretch", md: "center" }}
-            justifyContent="space-between"
-            spacing={2}
-          >
-            <Box>
-              <Typography sx={{ letterSpacing: 2.4, opacity: 0.78, fontSize: 12 }}>OVERVIEW</Typography>
-              <Typography variant="h4">Dashboard</Typography>
-              <Typography sx={{ opacity: 0.84, mt: 0.75, maxWidth: 560 }}>
-                Track balances, category spend, and income versus expense from one place.
-              </Typography>
-            </Box>
-            <Button
-              component={RouterLink}
-              to="/transactions"
-              variant="contained"
-              startIcon={<AddIcon />}
-              sx={{
-                alignSelf: { xs: "stretch", md: "center" },
-                bgcolor: "rgba(255,255,255,0.16)",
-                color: "common.white",
-                border: "1px solid rgba(255,255,255,0.18)",
-                boxShadow: "none",
-                "&:hover": { bgcolor: "rgba(255,255,255,0.22)", boxShadow: "none" },
-              }}
-            >
-              Add transaction
-            </Button>
-          </Stack>
-        </CardContent>
-      </Card>
+      <PageHero
+        title="Dashboard"
+        description="Track balances, category spend, and income versus expense from one place."
+        actions={
+          <Button component={RouterLink} to="/transactions" variant="contained" startIcon={<AddIcon />}>
+            Add transaction
+          </Button>
+        }
+      />
 
       {isPending && <LinearProgress sx={{ mb: 2, borderRadius: 999 }} />}
       {loadError && (
@@ -201,50 +297,206 @@ export function DashboardPage() {
       )}
 
       <Grid container spacing={2.5}>
+        <Grid item xs={12}>
+          <Typography fontWeight={900} sx={{ letterSpacing: 0.2 }}>
+            Overview
+          </Typography>
+          <Typography color="text.secondary" variant="body2">
+            Quick snapshot across balance, income, expense, and goals.
+          </Typography>
+        </Grid>
+
         <Grid item xs={12} sm={6} md={3}>
-          <Card sx={{ height: "100%" }}>
-            <CardContent>
-              <Typography color="text.secondary">Balance</Typography>
-              <Typography variant="h4" sx={{ color: totalBalance >= 0 ? "success.main" : "error.main" }}>
-                {formatMoney(totalBalance, primaryCountryCode)}
-              </Typography>
-            </CardContent>
-          </Card>
+          <KpiCard
+            title="Balance"
+            value={formatMoney(totalBalance, primaryCountryCode)}
+            accent={totalBalance >= 0 ? theme.palette.success.main : theme.palette.error.main}
+            icon={<AccountBalanceWalletRoundedIcon />}
+          />
         </Grid>
         <Grid item xs={12} sm={6} md={3}>
-          <Card sx={{ height: "100%" }}>
-            <CardContent>
-              <Typography color="text.secondary">Income (period)</Typography>
-              <Typography variant="h4" sx={{ color: "success.main" }}>
-                {formatMoney(income, primaryCountryCode)}
-              </Typography>
-            </CardContent>
-          </Card>
+          <KpiCard
+            title="Income (health range)"
+            value={formatMoney(periodIncome, primaryCountryCode)}
+            accent={theme.palette.success.main}
+            icon={<TrendingUpRoundedIcon />}
+          />
         </Grid>
         <Grid item xs={12} sm={6} md={3}>
-          <Card sx={{ height: "100%" }}>
-            <CardContent>
-              <Typography color="text.secondary">Expense (period)</Typography>
-              <Typography variant="h4" sx={{ color: "error.main" }}>
-                {formatMoney(expense, primaryCountryCode)}
-              </Typography>
-            </CardContent>
-          </Card>
+          <KpiCard
+            title="Expense (health range)"
+            value={formatMoney(periodExpense, primaryCountryCode)}
+            accent={theme.palette.error.main}
+            icon={<TrendingDownRoundedIcon />}
+          />
         </Grid>
         <Grid item xs={12} sm={6} md={3}>
-          <Card sx={{ height: "100%" }}>
-            <CardContent>
-              <Typography color="text.secondary">Savings goals</Typography>
-              <Typography variant="h4">{goalPct}%</Typography>
-              <Typography color="text.secondary" variant="body2">
-                {formatMoney(totalGoalCurrent, primaryCountryCode)} / {formatMoney(totalGoalTarget, primaryCountryCode)}
+          <KpiCard
+            title="Savings goals"
+            value={`${goalPct}%`}
+            caption={`${formatMoney(totalGoalCurrent, primaryCountryCode)} / ${formatMoney(totalGoalTarget, primaryCountryCode)}`}
+            accent={theme.palette.text.primary}
+            icon={<SavingsRoundedIcon />}
+          />
+        </Grid>
+
+        <Grid item xs={12}>
+          <Typography fontWeight={900} sx={{ letterSpacing: 0.2, mt: 0.5 }}>
+            Decision support
+          </Typography>
+          <Typography color="text.secondary" variant="body2">
+            Health score and cash-flow forecasting to guide day-to-day decisions.
+          </Typography>
+        </Grid>
+
+        <Grid item xs={12} sm={6} md={4}>
+          <Card sx={panelSx}>
+            <CardContent sx={{ display: "flex", flexDirection: "column", height: "100%" }}>
+              <Typography color="text.secondary" fontWeight={900}>
+                Health score
               </Typography>
+              <Stack spacing={2} alignItems="center" textAlign="center" sx={{ mt: 1.5, flex: 1 }}>
+                <Box sx={{ position: "relative", width: 64, height: 64 }}>
+                  <CircularProgress
+                    variant="determinate"
+                    value={100}
+                    size={64}
+                    thickness={5}
+                    sx={{ color: "rgba(15,23,42,0.10)", position: "absolute", left: 0, top: 0 }}
+                  />
+                  <CircularProgress
+                    variant="determinate"
+                    value={healthPct}
+                    size={64}
+                    thickness={5}
+                    sx={{ color: healthColor, position: "absolute", left: 0, top: 0 }}
+                  />
+                  <Box
+                    sx={{
+                      position: "absolute",
+                      left: 0,
+                      top: 0,
+                      width: "100%",
+                      height: "100%",
+                      display: "grid",
+                      placeItems: "center",
+                      color: healthColor,
+                    }}
+                  >
+                    <FavoriteRoundedIcon fontSize="small" />
+                  </Box>
+                </Box>
+
+                <Box sx={{ width: "100%" }}>
+                  <Stack spacing={1} alignItems="center">
+                    <Typography variant="h4" sx={{ fontWeight: 900 }}>
+                      {healthValue === null ? "--" : `${healthValue}/100`}
+                    </Typography>
+                    <Chip
+                      size="small"
+                      label={healthCondition}
+                      color={healthPct >= 80 ? "success" : healthPct >= 60 ? "info" : healthPct >= 40 ? "warning" : "error"}
+                      variant="outlined"
+                    />
+                  </Stack>
+                  {healthScore.data?.from && (
+                    <Typography variant="body2" color="text.secondary">
+                      Range: {healthScore.data.from} → {healthScore.data.to}
+                    </Typography>
+                  )}
+                </Box>
+
+                {healthScore.data?.breakdown && (
+                  <Box sx={{ width: "100%", textAlign: "left" }}>
+                    <Divider sx={{ my: 1.25 }} />
+                    <Stack spacing={1.25}>
+                      {[
+                        ["Savings rate", healthScore.data.breakdown.savingsRateScore],
+                        ["Expense stability", healthScore.data.breakdown.expenseStabilityScore],
+                        ["Budget adherence", healthScore.data.breakdown.budgetAdherenceScore],
+                        ["Cash buffer", healthScore.data.breakdown.cashBufferScore],
+                      ].map(([label, value]) => (
+                        <Box key={label as string}>
+                          <Stack direction="row" justifyContent="space-between" alignItems="baseline">
+                            <Typography variant="body2" color="text.secondary">
+                              {label}
+                            </Typography>
+                            <Typography variant="body2" sx={{ fontWeight: 800 }}>
+                              {Number(value)}
+                            </Typography>
+                          </Stack>
+                          <LinearProgress
+                            variant="determinate"
+                            value={Math.max(0, Math.min(100, Number(value)))}
+                            sx={{ mt: 0.5, borderRadius: 999, height: 7, backgroundColor: "rgba(15,23,42,0.08)" }}
+                          />
+                        </Box>
+                      ))}
+                    </Stack>
+                  </Box>
+                )}
+              </Stack>
+              <Button component={RouterLink} to="/insights" size="small" sx={{ mt: "auto", alignSelf: "flex-start" }}>
+                View insights
+              </Button>
             </CardContent>
           </Card>
         </Grid>
 
+        <Grid item xs={12} md={8}>
+          <Card sx={panelSx}>
+            <CardContent>
+              <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} justifyContent="space-between" sx={{ mb: 1.5 }}>
+                <Box>
+                  <Typography fontWeight={900}>Projected balance</Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    End balance: {formatMoney(monthForecast.data?.forecastEndBalance ?? 0, primaryCountryCode)} · Safe to spend:{" "}
+                    {formatMoney(monthForecast.data?.safeToSpend ?? 0, primaryCountryCode)}
+                  </Typography>
+                </Box>
+                {monthForecast.data?.negativeBalanceLikely && <Chip color="warning" label="Negative balance likely" />}
+              </Stack>
+
+              <Box sx={{ height: 260 }}>
+                <ResponsiveContainer>
+                  <LineChart data={forecastPoints}>
+                    <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="rgba(15,23,42,0.10)" />
+                    <XAxis dataKey="date" tickLine={false} axisLine={false} />
+                    <YAxis
+                      tickLine={false}
+                      axisLine={false}
+                      width={110}
+                      tickFormatter={(value) => formatMoney(Number(value), primaryCountryCode)}
+                    />
+                    <Tooltip
+                      formatter={(value: number) => formatMoney(Number(value), primaryCountryCode)}
+                      contentStyle={{ borderRadius: 12, border: "1px solid rgba(15,23,42,0.08)" }}
+                    />
+                    <Line type="monotone" dataKey="balance" stroke="#1f6f53" strokeWidth={3} dot={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </Box>
+
+              {(monthForecast.data?.warnings ?? []).slice(0, 2).map((w) => (
+                <Typography key={w} variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                  • {w}
+                </Typography>
+              ))}
+            </CardContent>
+          </Card>
+        </Grid>
+
+        <Grid item xs={12}>
+          <Typography fontWeight={900} sx={{ letterSpacing: 0.2, mt: 0.5 }}>
+            Trends
+          </Typography>
+          <Typography color="text.secondary" variant="body2">
+            Category mix and monthly income vs expense.
+          </Typography>
+        </Grid>
+
         <Grid item xs={12} xl={5}>
-          <Card sx={{ height: "100%" }}>
+          <Card sx={panelSx}>
             <CardContent>
               <Typography fontWeight={900} sx={{ mb: 2 }}>
                 Income & Expense by Category
@@ -324,7 +576,7 @@ export function DashboardPage() {
         </Grid>
 
         <Grid item xs={12} xl={7}>
-          <Card sx={{ height: "100%" }}>
+          <Card sx={panelSx}>
             <CardContent>
               <Typography sx={{ mb: 2 }} fontWeight={900}>
                 {`Income vs Expense Trend (${currentYear})`}
@@ -388,8 +640,17 @@ export function DashboardPage() {
           </Card>
         </Grid>
 
+        <Grid item xs={12}>
+          <Typography fontWeight={900} sx={{ letterSpacing: 0.2, mt: 0.5 }}>
+            Activity
+          </Typography>
+          <Typography color="text.secondary" variant="body2">
+            Recent transactions and upcoming bills.
+          </Typography>
+        </Grid>
+
         <Grid item xs={12} md={6}>
-          <Card sx={{ height: "100%" }}>
+          <Card sx={panelSx}>
             <CardContent>
               <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1.5 }}>
                 <Typography fontWeight={900}>Recent Transactions</Typography>
@@ -397,99 +658,103 @@ export function DashboardPage() {
                   View all
                 </Button>
               </Stack>
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Date</TableCell>
-                    <TableCell>Merchant</TableCell>
-                    <TableCell>Type</TableCell>
-                    <TableCell align="right">Amount</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {(recent.data?.items ?? []).map((transaction) => {
-                    const account = accountById.get(transaction.accountId);
-                    const countryCode = account?.countryCode ?? primaryCountryCode;
-                    return (
-                      <TableRow key={transaction.id} hover>
-                        <TableCell>{formatDisplayDate(transaction.date)}</TableCell>
-                        <TableCell>{transaction.merchant ?? "-"}</TableCell>
-                        <TableCell>
-                          <Chip
-                            size="small"
-                            label={transaction.type}
-                            color={transaction.type === "income" ? "success" : transaction.type === "expense" ? "error" : "default"}
-                            variant="outlined"
-                          />
-                        </TableCell>
-                        <TableCell align="right">
-                          <Typography
-                            component="span"
-                            fontWeight={700}
-                            color={
-                              transaction.type === "income"
-                                ? "success.main"
-                                : transaction.type === "expense"
-                                  ? "error.main"
-                                  : "text.primary"
-                            }
-                          >
-                            {formatMoney(transaction.amount, countryCode)}
-                          </Typography>
+              <Box sx={{ overflowX: "auto" }}>
+                <Table size="small" sx={{ minWidth: 520 }}>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Date</TableCell>
+                      <TableCell>Merchant</TableCell>
+                      <TableCell>Type</TableCell>
+                      <TableCell align="right">Amount</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {(recent.data?.items ?? []).map((transaction) => {
+                      const account = accountById.get(transaction.accountId);
+                      const countryCode = account?.countryCode ?? primaryCountryCode;
+                      return (
+                        <TableRow key={transaction.id} hover>
+                          <TableCell>{formatDisplayDate(transaction.date)}</TableCell>
+                          <TableCell>{transaction.merchant ?? "-"}</TableCell>
+                          <TableCell>
+                            <Chip
+                              size="small"
+                              label={transaction.type}
+                              color={transaction.type === "income" ? "success" : transaction.type === "expense" ? "error" : "default"}
+                              variant="outlined"
+                            />
+                          </TableCell>
+                          <TableCell align="right">
+                            <Typography
+                              component="span"
+                              fontWeight={700}
+                              color={
+                                transaction.type === "income"
+                                  ? "success.main"
+                                  : transaction.type === "expense"
+                                    ? "error.main"
+                                    : "text.primary"
+                              }
+                            >
+                              {formatMoney(transaction.amount, countryCode)}
+                            </Typography>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                    {!(recent.data?.items?.length) && (
+                      <TableRow>
+                        <TableCell colSpan={4}>
+                          <Typography color="text.secondary">No transactions yet</Typography>
                         </TableCell>
                       </TableRow>
-                    );
-                  })}
-                  {!(recent.data?.items?.length) && (
-                    <TableRow>
-                      <TableCell colSpan={4}>
-                        <Typography color="text.secondary">No transactions yet</Typography>
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
+                    )}
+                  </TableBody>
+                </Table>
+              </Box>
             </CardContent>
           </Card>
         </Grid>
 
         <Grid item xs={12} md={6}>
-          <Card sx={{ height: "100%" }}>
+          <Card sx={panelSx}>
             <CardContent>
               <Typography sx={{ mb: 1.5 }} fontWeight={900}>
                 Upcoming Bills
               </Typography>
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Next date</TableCell>
-                    <TableCell>Title</TableCell>
-                    <TableCell>Frequency</TableCell>
-                    <TableCell align="right">Amount</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {upcoming.map((item) => {
-                    const account = item.accountId ? accountById.get(item.accountId) : undefined;
-                    const countryCode = account?.countryCode ?? primaryCountryCode;
-                    return (
-                      <TableRow key={item.id} hover>
-                        <TableCell>{formatDisplayDate(item.nextRunDate)}</TableCell>
-                        <TableCell>{item.title}</TableCell>
-                        <TableCell>{item.frequency}</TableCell>
-                        <TableCell align="right">{formatMoney(item.amount, countryCode)}</TableCell>
-                      </TableRow>
-                    );
-                  })}
-                  {!upcoming.length && (
+              <Box sx={{ overflowX: "auto" }}>
+                <Table size="small" sx={{ minWidth: 520 }}>
+                  <TableHead>
                     <TableRow>
-                      <TableCell colSpan={4}>
-                        <Typography color="text.secondary">No recurring items yet</Typography>
-                      </TableCell>
+                      <TableCell>Next date</TableCell>
+                      <TableCell>Title</TableCell>
+                      <TableCell>Source</TableCell>
+                      <TableCell align="right">Amount</TableCell>
                     </TableRow>
-                  )}
-                </TableBody>
-              </Table>
+                  </TableHead>
+                  <TableBody>
+                    {upcomingRows.map((item) => {
+                      const account = item.accountId ? accountById.get(item.accountId) : undefined;
+                      const countryCode = account?.countryCode ?? primaryCountryCode;
+                      return (
+                        <TableRow key={item.key} hover>
+                          <TableCell>{formatDisplayDate(item.date)}</TableCell>
+                          <TableCell>{item.title}</TableCell>
+                          <TableCell>{item.meta}</TableCell>
+                          <TableCell align="right">{formatMoney(item.amount, countryCode)}</TableCell>
+                        </TableRow>
+                      );
+                    })}
+                    {!upcomingRows.length && (
+                      <TableRow>
+                        <TableCell colSpan={4}>
+                          <Typography color="text.secondary">No upcoming items yet</Typography>
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </Box>
             </CardContent>
           </Card>
         </Grid>

@@ -11,7 +11,9 @@ public record TransactionDto(
     string? Merchant,
     string? Note,
     string? PaymentMethod,
-    IReadOnlyList<string> Tags
+    IReadOnlyList<string> Tags,
+    Guid CreatedByUserId,
+    string? CreatedByDisplayName
 );
 
 public record CreateTransactionRequest(
@@ -39,4 +41,3 @@ public record UpdateTransactionRequest(
     string? PaymentMethod,
     IReadOnlyList<string>? Tags
 );
-

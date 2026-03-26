@@ -1,5 +1,5 @@
 import { http } from "./http";
-import type { CategorySpendItem, IncomeVsExpensePoint } from "./types";
+import type { CategorySpendItem, IncomeVsExpensePoint, NetWorthReport, TrendsReport } from "./types";
 
 export type AccountBalanceTrendPoint = {
   date: string;
@@ -30,5 +30,15 @@ export async function exportTransactionsCsv(params?: {
   search?: string;
 }) {
   const res = await http.get<Blob>("/api/reports/export.csv", { params, responseType: "blob" });
+  return res.data;
+}
+
+export async function trends(params?: { from?: string; to?: string; accountId?: string; categoryId?: string }) {
+  const res = await http.get<TrendsReport>("/api/reports/trends", { params });
+  return res.data;
+}
+
+export async function netWorth(params?: { from?: string; to?: string; accountId?: string }) {
+  const res = await http.get<NetWorthReport>("/api/reports/net-worth", { params });
   return res.data;
 }

@@ -7,7 +7,9 @@ public record AccountDto(
     string CountryCode,
     decimal OpeningBalance,
     decimal CurrentBalance,
-    string? InstitutionName
+    string? InstitutionName,
+    Guid OwnerUserId,
+    bool IsOwner
 );
 
 public record CreateAccountRequest(

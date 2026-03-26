@@ -38,7 +38,7 @@ type FormState = {
   id?: string;
   title: string;
   type: string;
-  amount: number;
+  amount: string;
   frequency: string;
   startDate: string;
   endDate: string;
@@ -52,12 +52,20 @@ function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function parseAmount(raw: string) {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  const n = Number(trimmed);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return n;
+}
+
 function defaultForm(): FormState {
   const today = todayIso();
   return {
     title: "",
     type: "expense",
-    amount: 0,
+    amount: "",
     frequency: "monthly",
     startDate: today,
     endDate: "",
@@ -92,14 +100,17 @@ export function RecurringPage() {
   const [form, setForm] = useState<FormState>(() => defaultForm());
   const isEdit = !!form.id;
 
-  const canSubmit = useMemo(() => form.title.trim() && form.amount > 0 && form.frequency.trim(), [form]);
+  const canSubmit = useMemo(() => form.title.trim() && !!parseAmount(form.amount) && form.frequency.trim(), [form]);
 
   const save = useMutation({
     mutationFn: async () => {
+      const amount = parseAmount(form.amount);
+      if (!amount) throw new Error("Amount must be greater than 0.");
+
       const payload = {
         title: form.title.trim(),
         type: form.type.trim(),
-        amount: Number(form.amount),
+        amount,
         frequency: form.frequency.trim(),
         startDate: form.startDate,
         endDate: form.endDate || null,
@@ -142,7 +153,7 @@ export function RecurringPage() {
       id: r.id,
       title: r.title,
       type: r.type,
-      amount: r.amount,
+      amount: String(r.amount),
       frequency: r.frequency,
       startDate: r.startDate,
       endDate: r.endDate ?? "",
@@ -261,7 +272,14 @@ export function RecurringPage() {
               <MenuItem value="expense">Expense</MenuItem>
               <MenuItem value="income">Income</MenuItem>
             </TextField>
-            <TextField required label="Amount" type="number" value={form.amount} onChange={(e) => setForm((s) => ({ ...s, amount: Number(e.target.value) }))} />
+            <TextField
+              required
+              label="Amount"
+              type="number"
+              value={form.amount}
+              onChange={(e) => setForm((s) => ({ ...s, amount: e.target.value }))}
+              inputProps={{ min: 0, step: "0.01" }}
+            />
             <TextField required label="Frequency" value={form.frequency} onChange={(e) => setForm((s) => ({ ...s, frequency: e.target.value }))} />
             <TextField select label="Account (optional)" value={form.accountId} onChange={(e) => setForm((s) => ({ ...s, accountId: e.target.value }))}>
               <MenuItem value="">None</MenuItem>

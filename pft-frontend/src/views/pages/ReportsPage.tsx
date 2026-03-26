@@ -20,13 +20,16 @@ import {
   CartesianGrid,
   Cell,
   Legend,
+  Line,
+  LineChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
 import { listAccounts } from "../../api/accounts";
-import { categorySpend, exportTransactionsCsv, incomeVsExpense } from "../../api/reports";
+import { listCategories } from "../../api/categories";
+import { categorySpend, exportTransactionsCsv, incomeVsExpense, netWorth, trends } from "../../api/reports";
 import { categoryColor } from "../../utils/categoryColors";
 import { formatMoney } from "../../utils/money";
 import { PageHero } from "../../components/PageHero";
@@ -78,12 +81,14 @@ function errorMessage(err: unknown) {
 
 export function ReportsPage() {
   const accounts = useQuery({ queryKey: ["accounts"], queryFn: listAccounts });
+  const categories = useQuery({ queryKey: ["categories"], queryFn: () => listCategories(false) });
 
   const [preset, setPreset] = useState("this_month");
   const presetDates = useMemo(() => presetRange(preset), [preset]);
   const [from, setFrom] = useState(presetDates.from);
   const [to, setTo] = useState(presetDates.to);
   const [accountId, setAccountId] = useState("");
+  const [categoryId, setCategoryId] = useState("");
   const [type, setType] = useState("");
 
   useEffect(() => {
@@ -103,8 +108,26 @@ export function ReportsPage() {
     queryFn: () => incomeVsExpense({ from: from || undefined, to: to || undefined }),
   });
 
-  const isPending = accounts.isPending || spend.isPending || incomeExpense.isPending;
-  const loadError = accounts.error ?? spend.error ?? incomeExpense.error;
+  const trendsReport = useQuery({
+    queryKey: ["reports", "trends", from, to, accountId, categoryId],
+    queryFn: () =>
+      trends({
+        from: from || undefined,
+        to: to || undefined,
+        accountId: accountId || undefined,
+        categoryId: categoryId || undefined,
+      }),
+  });
+
+  const netWorthReport = useQuery({
+    queryKey: ["reports", "net-worth", from, to, accountId],
+    queryFn: () => netWorth({ from: from || undefined, to: to || undefined, accountId: accountId || undefined }),
+  });
+
+  const isPending =
+    accounts.isPending || categories.isPending || spend.isPending || incomeExpense.isPending || trendsReport.isPending || netWorthReport.isPending;
+  const loadError =
+    accounts.error ?? categories.error ?? spend.error ?? incomeExpense.error ?? trendsReport.error ?? netWorthReport.error;
 
   const displayCountryCode = useMemo(() => {
     if (accountId) {
@@ -126,6 +149,39 @@ export function ReportsPage() {
     income: item.income,
     expense: item.expense,
   }));
+
+  const savingsRateData = (trendsReport.data?.savingsRateTrend ?? []).map((p) => ({
+    period: p.period,
+    rate: p.value,
+  }));
+
+  const netWorthData = (netWorthReport.data?.points ?? []).map((p) => ({
+    period: p.period,
+    netWorth: p.netWorth,
+  }));
+
+  const categoryTrendLines = useMemo(() => {
+    const series = (trendsReport.data?.categoryTrends ?? []).slice(0, 5);
+    const allPeriods = new Set<string>();
+    series.forEach((s) => s.points.forEach((p) => allPeriods.add(p.period)));
+    const periods = Array.from(allPeriods).sort();
+
+    const bySeries = series.map((s) => ({
+      name: s.categoryName,
+      points: new Map(s.points.map((p) => [p.period, p.value])),
+    }));
+
+    return {
+      series: bySeries.map((s) => s.name),
+      data: periods.map((period) => {
+        const row: Record<string, any> = { period };
+        bySeries.forEach((s) => {
+          row[s.name] = s.points.get(period) ?? 0;
+        });
+        return row;
+      }),
+    };
+  }, [trendsReport.data?.categoryTrends]);
   const topCategories = (spend.data ?? [])
     .slice()
     .sort((a, b) => b.totalExpense - a.totalExpense)
@@ -213,6 +269,14 @@ export function ReportsPage() {
                 </MenuItem>
               ))}
             </TextField>
+            <TextField select label="Category" value={categoryId} onChange={(e) => setCategoryId(e.target.value)} sx={{ minWidth: 220 }}>
+              <MenuItem value="">All</MenuItem>
+              {(categories.data ?? []).map((c) => (
+                <MenuItem key={c.id} value={c.id}>
+                  {c.name}
+                </MenuItem>
+              ))}
+            </TextField>
             <TextField select label="Type" value={type} onChange={(e) => setType(e.target.value)} sx={{ minWidth: 170 }}>
               <MenuItem value="">All</MenuItem>
               <MenuItem value="expense">Expense</MenuItem>
@@ -246,6 +310,83 @@ export function ReportsPage() {
             <Typography variant="h4" sx={{ color: summary.net >= 0 ? "success.main" : "error.main" }}>
               {formatMoney(summary.net, displayCountryCode)}
             </Typography>
+          </CardContent>
+        </Card>
+      </Stack>
+
+      {categoryTrendLines.series.length > 0 && (
+        <Card sx={{ mb: 2.5 }}>
+          <CardContent>
+            <Typography fontWeight={900} sx={{ mb: 2 }}>
+              Category Trends (Top 5)
+            </Typography>
+            <Box sx={{ height: 340 }}>
+              <ResponsiveContainer>
+                <LineChart data={categoryTrendLines.data}>
+                  <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="rgba(15,23,42,0.10)" />
+                  <XAxis dataKey="period" tickLine={false} axisLine={false} />
+                  <YAxis
+                    tickLine={false}
+                    axisLine={false}
+                    width={100}
+                    tickFormatter={(value) => formatMoney(Number(value), displayCountryCode)}
+                  />
+                  <Tooltip
+                    contentStyle={{ borderRadius: 12, border: "1px solid rgba(15,23,42,0.08)" }}
+                    formatter={(v: number, name: string) => [formatMoney(Number(v), displayCountryCode), String(name)]}
+                  />
+                  <Legend />
+                  {categoryTrendLines.series.map((name, idx) => (
+                    <Line key={name} type="monotone" dataKey={name} stroke={categoryColor(name) || ["#1f6f53", "#305f9a", "#c62828", "#6a1b9a", "#ef6c00"][idx % 5]} strokeWidth={2.5} dot={false} />
+                  ))}
+                </LineChart>
+              </ResponsiveContainer>
+            </Box>
+          </CardContent>
+        </Card>
+      )}
+
+      <Stack direction={{ xs: "column", lg: "row" }} spacing={2.5} sx={{ mb: 2.5 }}>
+        <Card sx={{ flex: 1 }}>
+          <CardContent>
+            <Typography fontWeight={900} sx={{ mb: 2 }}>
+              Savings Rate Trend (%)
+            </Typography>
+            <Box sx={{ height: 300 }}>
+              <ResponsiveContainer>
+                <LineChart data={savingsRateData}>
+                  <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="rgba(15,23,42,0.10)" />
+                  <XAxis dataKey="period" tickLine={false} axisLine={false} />
+                  <YAxis tickLine={false} axisLine={false} width={70} />
+                  <Tooltip contentStyle={{ borderRadius: 12, border: "1px solid rgba(15,23,42,0.08)" }} formatter={(v: number) => `${Number(v).toFixed(2)}%`} />
+                  <Line type="monotone" dataKey="rate" stroke="#2e7d32" strokeWidth={3} dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            </Box>
+          </CardContent>
+        </Card>
+
+        <Card sx={{ flex: 1 }}>
+          <CardContent>
+            <Typography fontWeight={900} sx={{ mb: 2 }}>
+              Net Worth
+            </Typography>
+            <Box sx={{ height: 300 }}>
+              <ResponsiveContainer>
+                <LineChart data={netWorthData}>
+                  <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="rgba(15,23,42,0.10)" />
+                  <XAxis dataKey="period" tickLine={false} axisLine={false} />
+                  <YAxis
+                    tickLine={false}
+                    axisLine={false}
+                    width={100}
+                    tickFormatter={(value) => formatMoney(Number(value), displayCountryCode)}
+                  />
+                  <Tooltip contentStyle={{ borderRadius: 12, border: "1px solid rgba(15,23,42,0.08)" }} formatter={(v: number) => formatMoney(Number(v), displayCountryCode)} />
+                  <Line type="monotone" dataKey="netWorth" stroke="#1e2a4a" strokeWidth={3} dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            </Box>
           </CardContent>
         </Card>
       </Stack>

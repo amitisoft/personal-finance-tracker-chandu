@@ -16,21 +16,33 @@ public class GoalsController(
     PftDbContext db,
     ICurrentUser currentUser,
     IBalanceService balance,
+    IAccessControlService acl,
     IHostEnvironment env,
     ILogger<GoalsController> logger) : ControllerBase
 {
     [HttpGet]
-    public async Task<ActionResult<IReadOnlyList<GoalDto>>> List(CancellationToken ct)
+    public async Task<ActionResult<IReadOnlyList<GoalDto>>> List([FromQuery] Guid? accountId = null, CancellationToken ct = default)
     {
         var userId = currentUser.UserId;
         if (userId == Guid.Empty) return Unauthorized();
 
         try
         {
-            var items = await db.Goals.AsNoTracking()
-                .Where(g => g.UserId == userId)
+            IQueryable<Goal> q;
+            if (accountId is not null && accountId != Guid.Empty)
+            {
+                var access = await acl.GetAccountAccessAsync(userId, accountId.Value, ct);
+                if (!access.CanView) return NotFound();
+                q = db.Goals.AsNoTracking().Where(g => g.AccountId == accountId);
+            }
+            else
+            {
+                q = db.Goals.AsNoTracking().Where(g => g.UserId == userId && g.AccountId == null);
+            }
+
+            var items = await q
                 .OrderBy(g => g.Name)
-                .Select(g => new GoalDto(g.Id, g.Name, g.TargetAmount, g.CurrentAmount, g.TargetDate, g.Status))
+                .Select(g => new GoalDto(g.Id, g.AccountId, g.Name, g.TargetAmount, g.CurrentAmount, g.TargetDate, g.Status))
                 .ToListAsync(ct);
 
             return Ok(items);
@@ -52,10 +64,18 @@ public class GoalsController(
 
         try
         {
+            Guid? accountId = req.AccountId is not null && req.AccountId != Guid.Empty ? req.AccountId : null;
+            if (accountId is not null)
+            {
+                var access = await acl.GetAccountAccessAsync(userId, accountId.Value, ct);
+                if (!access.CanEdit) return Forbid();
+            }
+
             var g = new Goal
             {
                 Id = Guid.NewGuid(),
                 UserId = userId,
+                AccountId = accountId,
                 Name = req.Name.Trim(),
                 TargetAmount = req.TargetAmount,
                 CurrentAmount = 0,
@@ -66,7 +86,7 @@ public class GoalsController(
             db.Goals.Add(g);
             await db.SaveChangesAsync(ct);
 
-            return Ok(new GoalDto(g.Id, g.Name, g.TargetAmount, g.CurrentAmount, g.TargetDate, g.Status));
+            return Ok(new GoalDto(g.Id, g.AccountId, g.Name, g.TargetAmount, g.CurrentAmount, g.TargetDate, g.Status));
         }
         catch (Exception ex)
         {
@@ -80,7 +100,7 @@ public class GoalsController(
         var userId = currentUser.UserId;
         if (userId == Guid.Empty) return Unauthorized();
 
-        var g = await db.Goals.SingleOrDefaultAsync(x => x.Id == id && x.UserId == userId, ct);
+        var g = await db.Goals.SingleOrDefaultAsync(x => x.Id == id, ct);
         if (g is null) return NotFound();
 
         if (string.IsNullOrWhiteSpace(req.Name)) return BadRequest("Name is required.");
@@ -88,13 +108,23 @@ public class GoalsController(
 
         try
         {
+            if (g.AccountId is not null)
+            {
+                var access = await acl.GetAccountAccessAsync(userId, g.AccountId.Value, ct);
+                if (!access.CanEdit) return Forbid();
+            }
+            else if (g.UserId != userId)
+            {
+                return Forbid();
+            }
+
             g.Name = req.Name.Trim();
             g.TargetAmount = req.TargetAmount;
             g.TargetDate = req.TargetDate;
             g.Status = string.IsNullOrWhiteSpace(req.Status) ? g.Status : req.Status.Trim().ToLowerInvariant();
             await db.SaveChangesAsync(ct);
 
-            return Ok(new GoalDto(g.Id, g.Name, g.TargetAmount, g.CurrentAmount, g.TargetDate, g.Status));
+            return Ok(new GoalDto(g.Id, g.AccountId, g.Name, g.TargetAmount, g.CurrentAmount, g.TargetDate, g.Status));
         }
         catch (Exception ex)
         {
@@ -109,13 +139,26 @@ public class GoalsController(
         if (userId == Guid.Empty) return Unauthorized();
         if (req.Amount <= 0) return BadRequest("Amount must be > 0.");
 
-        var g = await db.Goals.SingleOrDefaultAsync(x => x.Id == id && x.UserId == userId, ct);
+        var g = await db.Goals.SingleOrDefaultAsync(x => x.Id == id, ct);
         if (g is null) return NotFound();
 
         try
         {
+            if (g.AccountId is not null)
+            {
+                var access = await acl.GetAccountAccessAsync(userId, g.AccountId.Value, ct);
+                if (!access.CanEdit) return Forbid();
+            }
+            else if (g.UserId != userId)
+            {
+                return Forbid();
+            }
+
             if (req.AccountId is not null)
             {
+                var access = await acl.GetAccountAccessAsync(userId, req.AccountId.Value, ct);
+                if (!access.CanEdit) return Forbid();
+
                 var tx = new Transaction
                 {
                     Id = Guid.NewGuid(),
@@ -140,7 +183,7 @@ public class GoalsController(
             g.CurrentAmount += req.Amount;
             await db.SaveChangesAsync(ct);
 
-            return Ok(new GoalDto(g.Id, g.Name, g.TargetAmount, g.CurrentAmount, g.TargetDate, g.Status));
+            return Ok(new GoalDto(g.Id, g.AccountId, g.Name, g.TargetAmount, g.CurrentAmount, g.TargetDate, g.Status));
         }
         catch (Exception ex)
         {
@@ -155,14 +198,27 @@ public class GoalsController(
         if (userId == Guid.Empty) return Unauthorized();
         if (req.Amount <= 0) return BadRequest("Amount must be > 0.");
 
-        var g = await db.Goals.SingleOrDefaultAsync(x => x.Id == id && x.UserId == userId, ct);
+        var g = await db.Goals.SingleOrDefaultAsync(x => x.Id == id, ct);
         if (g is null) return NotFound();
         if (g.CurrentAmount < req.Amount) return BadRequest("Withdrawal exceeds current goal amount.");
 
         try
         {
+            if (g.AccountId is not null)
+            {
+                var access = await acl.GetAccountAccessAsync(userId, g.AccountId.Value, ct);
+                if (!access.CanEdit) return Forbid();
+            }
+            else if (g.UserId != userId)
+            {
+                return Forbid();
+            }
+
             if (req.AccountId is not null)
             {
+                var access = await acl.GetAccountAccessAsync(userId, req.AccountId.Value, ct);
+                if (!access.CanEdit) return Forbid();
+
                 var tx = new Transaction
                 {
                     Id = Guid.NewGuid(),
@@ -187,7 +243,7 @@ public class GoalsController(
             g.CurrentAmount -= req.Amount;
             await db.SaveChangesAsync(ct);
 
-            return Ok(new GoalDto(g.Id, g.Name, g.TargetAmount, g.CurrentAmount, g.TargetDate, g.Status));
+            return Ok(new GoalDto(g.Id, g.AccountId, g.Name, g.TargetAmount, g.CurrentAmount, g.TargetDate, g.Status));
         }
         catch (Exception ex)
         {
@@ -201,11 +257,21 @@ public class GoalsController(
         var userId = currentUser.UserId;
         if (userId == Guid.Empty) return Unauthorized();
 
-        var g = await db.Goals.SingleOrDefaultAsync(x => x.Id == id && x.UserId == userId, ct);
+        var g = await db.Goals.SingleOrDefaultAsync(x => x.Id == id, ct);
         if (g is null) return NotFound();
 
         try
         {
+            if (g.AccountId is not null)
+            {
+                var access = await acl.GetAccountAccessAsync(userId, g.AccountId.Value, ct);
+                if (!access.CanEdit) return Forbid();
+            }
+            else if (g.UserId != userId)
+            {
+                return Forbid();
+            }
+
             db.Goals.Remove(g);
             await db.SaveChangesAsync(ct);
             return NoContent();

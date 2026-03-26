@@ -58,8 +58,9 @@ export function BudgetsPage() {
   const now = new Date();
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
+  const [accountId, setAccountId] = useState("");
 
-  const budgets = useQuery({ queryKey: ["budgets", month, year], queryFn: () => listBudgets(month, year) });
+  const budgets = useQuery({ queryKey: ["budgets", month, year, accountId], queryFn: () => listBudgets(month, year, accountId || undefined) });
   const categories = useQuery({ queryKey: ["categories"], queryFn: () => listCategories(false) });
   const accounts = useQuery({ queryKey: ["accounts"], queryFn: listAccounts });
 
@@ -70,11 +71,13 @@ export function BudgetsPage() {
 
   const range = useMemo(() => monthRange(year, month), [year, month]);
   const spend = useQuery({
-    queryKey: ["reports", "category-spend", range.from, range.to],
-    queryFn: () => categorySpend({ from: range.from, to: range.to }),
+    queryKey: ["reports", "category-spend", range.from, range.to, accountId],
+    queryFn: () => categorySpend({ from: range.from, to: range.to, accountId: accountId || undefined }),
   });
 
-  const displayCountryCode = (accounts.data ?? [])[0]?.countryCode ?? "IN";
+  const displayCountryCode = accountId
+    ? (accounts.data ?? []).find((a) => a.id === accountId)?.countryCode ?? "IN"
+    : (accounts.data ?? [])[0]?.countryCode ?? "IN";
   const categoryById = useMemo(() => new Map((categories.data ?? []).map((c) => [c.id, c])), [categories.data]);
   const spendByCategory = useMemo(
     () => new Map((spend.data ?? []).map((item) => [item.categoryId ?? "", item.totalExpense])),
@@ -112,13 +115,14 @@ export function BudgetsPage() {
         year,
         amount: Number(form.amount),
         alertThresholdPercent: Number(form.alertThresholdPercent),
+        accountId: accountId || null,
       });
     },
     onSuccess: async () => {
       setOpen(false);
       setSubmitError(null);
       setForm(defaultForm());
-      await queryClient.invalidateQueries({ queryKey: ["budgets", month, year] });
+      await queryClient.invalidateQueries({ queryKey: ["budgets", month, year, accountId] });
     },
     onError: (e) => setSubmitError(errorMessage(e)),
   });
@@ -127,7 +131,7 @@ export function BudgetsPage() {
     mutationFn: async () => deleteBudget(confirm!.id),
     onSuccess: async () => {
       setConfirm(null);
-      await queryClient.invalidateQueries({ queryKey: ["budgets", month, year] });
+      await queryClient.invalidateQueries({ queryKey: ["budgets", month, year, accountId] });
     },
     onError: (e) => setSubmitError(errorMessage(e)),
   });
@@ -161,6 +165,21 @@ export function BudgetsPage() {
         description="Set monthly budgets and review category performance as cards."
         actions={
           <Stack direction="row" spacing={1.5} alignItems="center" justifyContent="flex-end">
+            <TextField
+              select
+              size="small"
+              label="Scope"
+              value={accountId}
+              onChange={(e) => setAccountId(e.target.value)}
+              sx={{ minWidth: 180 }}
+            >
+              <MenuItem value="">Personal</MenuItem>
+              {(accounts.data ?? []).map((a) => (
+                <MenuItem key={a.id} value={a.id}>
+                  {a.name}
+                </MenuItem>
+              ))}
+            </TextField>
             <TextField select size="small" label="Month" value={month} onChange={(e) => setMonth(Number(e.target.value))} sx={{ minWidth: 130 }}>
               {monthOptions.map((m) => (
                 <MenuItem key={m} value={m}>

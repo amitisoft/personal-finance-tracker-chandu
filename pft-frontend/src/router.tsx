@@ -14,6 +14,9 @@ import { AccountsPage } from "./pages/AccountsPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { CategoriesPage } from "./views/pages/CategoriesPage";
 import { RecurringPage } from "./pages/RecurringPage";
+import { InsightsPage } from "./pages/InsightsPage";
+import { RulesPage } from "./pages/RulesPage";
+import { AcceptInvitePage } from "./views/pages/AcceptInvitePage";
 
 export const router = createBrowserRouter([
   { path: "/", element: <Navigate to="/dashboard" replace /> },
@@ -34,7 +37,10 @@ export const router = createBrowserRouter([
           { path: "/goals", element: <GoalsPage /> },
           { path: "/recurring", element: <RecurringPage /> },
           { path: "/reports", element: <ReportsPage /> },
+          { path: "/insights", element: <InsightsPage /> },
+          { path: "/rules", element: <RulesPage /> },
           { path: "/accounts", element: <AccountsPage /> },
+          { path: "/accept-invite", element: <AcceptInvitePage /> },
           { path: "/categories", element: <CategoriesPage /> },
           { path: "/settings", element: <SettingsPage /> },
         ],

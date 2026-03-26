@@ -74,9 +74,12 @@ function errorMessage(err: unknown) {
 }
 
 export function GoalsPage() {
-  const goals = useQuery({ queryKey: ["goals"], queryFn: listGoals });
+  const [accountId, setAccountId] = useState("");
+  const goals = useQuery({ queryKey: ["goals", accountId], queryFn: () => listGoals(accountId || undefined) });
   const accounts = useQuery({ queryKey: ["accounts"], queryFn: listAccounts });
-  const displayCountryCode = (accounts.data ?? [])[0]?.countryCode ?? "IN";
+  const displayCountryCode = accountId
+    ? (accounts.data ?? []).find((a) => a.id === accountId)?.countryCode ?? "IN"
+    : (accounts.data ?? [])[0]?.countryCode ?? "IN";
 
   const totals = useMemo(() => {
     const items = goals.data ?? [];
@@ -113,13 +116,14 @@ export function GoalsPage() {
         name: form.name.trim(),
         targetAmount: Number(form.targetAmount),
         targetDate: form.targetDate || null,
+        accountId: accountId || null,
       });
     },
     onSuccess: async () => {
       setOpen(false);
       setSubmitError(null);
       setForm(defaultForm());
-      await queryClient.invalidateQueries({ queryKey: ["goals"] });
+      await queryClient.invalidateQueries({ queryKey: ["goals", accountId] });
     },
     onError: (err) => setSubmitError(errorMessage(err)),
   });
@@ -139,7 +143,7 @@ export function GoalsPage() {
     onSuccess: async () => {
       setAdjust(null);
       setSubmitError(null);
-      await queryClient.invalidateQueries({ queryKey: ["goals"] });
+      await queryClient.invalidateQueries({ queryKey: ["goals", accountId] });
       await queryClient.invalidateQueries({ queryKey: ["accounts"] });
       await queryClient.invalidateQueries({ queryKey: ["transactions"] });
     },
@@ -150,7 +154,7 @@ export function GoalsPage() {
     mutationFn: async () => deleteGoal(confirm!.id),
     onSuccess: async () => {
       setConfirm(null);
-      await queryClient.invalidateQueries({ queryKey: ["goals"] });
+      await queryClient.invalidateQueries({ queryKey: ["goals", accountId] });
     },
     onError: (err) => setSubmitError(errorMessage(err)),
   });
@@ -184,9 +188,26 @@ export function GoalsPage() {
         title="Savings Goals"
         description="Set targets, track progress, and keep important goals visible."
         actions={
-          <Button variant="contained" onClick={openAdd}>
-            Add Goal
-          </Button>
+          <Stack direction={{ xs: "column", sm: "row" }} spacing={1.25} alignItems={{ xs: "stretch", sm: "center" }}>
+            <TextField
+              select
+              size="small"
+              label="Scope"
+              value={accountId}
+              onChange={(e) => setAccountId(e.target.value)}
+              sx={{ minWidth: 200 }}
+            >
+              <MenuItem value="">Personal</MenuItem>
+              {(accounts.data ?? []).map((a) => (
+                <MenuItem key={a.id} value={a.id}>
+                  {a.name}
+                </MenuItem>
+              ))}
+            </TextField>
+            <Button variant="contained" onClick={openAdd}>
+              Add Goal
+            </Button>
+          </Stack>
         }
       />
 

@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Pft.Data;
+using Pft.Middleware;
 using Pft.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -32,8 +33,17 @@ builder.Services.AddScoped<IPasswordResetService, PasswordResetService>();
 builder.Services.AddScoped<IBalanceService, BalanceService>();
 builder.Services.AddScoped<IReportsService, ReportsService>();
 builder.Services.AddScoped<INotificationsService, NotificationsService>();
+builder.Services.AddScoped<IRulesEngineService, RulesEngineService>();
+builder.Services.AddScoped<IInsightsService, InsightsService>();
+builder.Services.AddScoped<IForecastService, ForecastService>();
+builder.Services.AddScoped<IAccessControlService, AccessControlService>();
+builder.Services.AddScoped<AccountAccessContext>();
 builder.Services.AddHostedService<DatabaseInitializer>();
 builder.Services.AddHostedService<RecurringTransactionWorker>();
+
+builder.Services.Configure<EmailOptions>(builder.Configuration.GetSection("Email"));
+builder.Services.Configure<InviteOptions>(builder.Configuration.GetSection("Invites"));
+builder.Services.AddSingleton<IEmailSender, DefaultEmailSender>();
 
 var corsOrigins = GetCorsOrigins(builder.Configuration);
 
@@ -96,6 +106,7 @@ app.UseSwaggerUI();
 
 app.UseCors("frontend");
 app.UseAuthentication();
+app.UseMiddleware<AccountAccessContextMiddleware>();
 app.UseAuthorization();
 app.MapControllers();
 

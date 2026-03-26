@@ -1,5 +1,5 @@
 ﻿import { http } from "./http";
-import type { Account } from "./types";
+import type { Account, AccountMembersResponse, ActivityLogItem } from "./types";
 
 export async function listAccounts() {
   const res = await http.get<Account[]>("/api/accounts");
@@ -29,4 +29,31 @@ export async function updateAccount(payload: { id: string; name: string; type: s
 
 export async function deleteAccount(id: string) {
   await http.delete(`/api/accounts/${id}`);
+}
+
+export async function getAccountMembers(accountId: string) {
+  const res = await http.get<AccountMembersResponse>(`/api/accounts/${accountId}/members`);
+  return res.data;
+}
+
+export async function inviteAccountMember(accountId: string, payload: { email: string; role: "viewer" | "editor" }) {
+  const res = await http.post<{ status: string; email: string; role: string; devInviteToken?: string | null }>(
+    `/api/accounts/${accountId}/invite`,
+    payload,
+  );
+  return res.data;
+}
+
+export async function acceptAccountInvite(payload: { token: string }) {
+  const res = await http.post<{ status: string; accountId: string; role: string }>("/api/accounts/invites/accept", payload);
+  return res.data;
+}
+
+export async function updateAccountMemberRole(accountId: string, userId: string, payload: { role: "viewer" | "editor" | "owner" }) {
+  await http.put(`/api/accounts/${accountId}/members/${userId}`, payload);
+}
+
+export async function getAccountActivity(accountId: string, params?: { limit?: number }) {
+  const res = await http.get<ActivityLogItem[]>(`/api/accounts/${accountId}/activity`, { params });
+  return res.data;
 }

@@ -35,9 +35,32 @@ Open:
 - Swagger: `http://localhost:8080/swagger`
 - Health: `http://localhost:8080/healthz`
 
+## V2 (Focused Enhancements)
+Implemented backend endpoints:
+- Rules Engine: `GET/POST /api/rules`, `GET/PUT/DELETE /api/rules/{id}`
+- Financial Health Score: `GET /api/insights/health-score`
+- Insights cards: `GET /api/insights`
+- Cash Flow Forecasting: `GET /api/forecast/month`, `GET /api/forecast/daily`
+- Advanced Reporting: `GET /api/reports/trends`, `GET /api/reports/net-worth`
+- Shared Accounts: `POST /api/accounts/{id}/invite`, `GET /api/accounts/{id}/members`, `PUT /api/accounts/{id}/members/{userId}`
+
+Example rule (categorize Uber as Transport):
+```json
+{
+  "name": "Uber → Transport",
+  "priority": 10,
+  "isActive": true,
+  "condition": { "field": "merchant", "operator": "equals", "value": "Uber" },
+  "action": { "type": "set_category", "value": "Transport" }
+}
+```
+
+Notes:
+- Transaction creation (`POST /api/transactions`) applies active rules and may return headers `X-Pft-Rule-Alerts` and `X-Pft-Applied-Rules`.
+
 ## Podman deployment
 Podman deployment files now live in `pft-backend/deploy/podman/`.
-The backend container uses the Azure Database for PostgreSQL connection string configured in `deploy/podman/podman-compose.yml`.
+By default, `deploy/podman/podman-compose.yml` starts a local PostgreSQL container and points the backend at it.
 
 From the repo root:
 - PowerShell: `./pft-backend/deploy/podman/podman-up.ps1`

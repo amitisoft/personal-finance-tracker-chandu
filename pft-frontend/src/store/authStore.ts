@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { UserInfo } from "../api/auth";
+import { useNotificationStore } from "./notificationStore";
 
 type AuthState = {
   accessToken: string | null;
@@ -81,6 +82,7 @@ export const useAuthStore = create<AuthState>((set) => {
     localStorage.removeItem(ACCESS_KEY);
     localStorage.removeItem(REFRESH_KEY);
     localStorage.removeItem(USER_KEY);
+    useNotificationStore.getState().clearRuleAlerts();
     clearLogoutTimer();
     set({ accessToken: null, refreshToken: null, user: null, expiresAtMs: null });
   };

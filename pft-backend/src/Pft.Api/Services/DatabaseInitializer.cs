@@ -57,6 +57,32 @@ alter table accounts add column if not exists current_balance numeric(12,2) not 
 alter table accounts add column if not exists institution_name varchar(120);
 alter table accounts add column if not exists created_at timestamp not null default now();
 
+create table if not exists account_members (
+  id uuid primary key,
+  account_id uuid not null references accounts(id) on delete cascade,
+  user_id uuid not null references users(id) on delete cascade,
+  role varchar(10) not null default 'viewer',
+  created_at timestamp not null default now(),
+  constraint uq_account_members_account_user unique(account_id, user_id)
+);
+
+create index if not exists idx_account_members_user_role on account_members(user_id, role);
+
+create table if not exists account_invites (
+  id uuid primary key,
+  account_id uuid not null references accounts(id) on delete cascade,
+  invited_by_user_id uuid not null references users(id) on delete cascade,
+  email varchar(255) not null,
+  role varchar(10) not null default 'viewer',
+  token_hash varchar(128) unique not null,
+  expires_at timestamp not null,
+  created_at timestamp not null default now(),
+  accepted_at timestamp,
+  revoked_at timestamp
+);
+
+create index if not exists idx_account_invites_account_email on account_invites(account_id, email);
+
 create table if not exists categories (
   id uuid primary key,
   user_id uuid references users(id) on delete cascade,
@@ -94,9 +120,24 @@ alter table transactions add column if not exists updated_at timestamp not null 
 
 create index if not exists idx_transactions_user_date on transactions(user_id, transaction_date desc);
 
+create table if not exists activity_logs (
+  id uuid primary key,
+  account_id uuid not null references accounts(id) on delete cascade,
+  actor_user_id uuid not null references users(id) on delete cascade,
+  action varchar(50) not null,
+  entity_type varchar(50) not null,
+  entity_id uuid not null,
+  details_json jsonb,
+  created_at timestamp not null default now()
+);
+
+create index if not exists idx_activity_logs_account_created on activity_logs(account_id, created_at desc);
+create index if not exists idx_activity_logs_actor_created on activity_logs(actor_user_id, created_at desc);
+
 create table if not exists budgets (
   id uuid primary key,
   user_id uuid not null references users(id) on delete cascade,
+  account_id uuid references accounts(id) on delete cascade,
   category_id uuid not null references categories(id) on delete cascade,
   month int not null,
   year int not null,
@@ -106,10 +147,14 @@ create table if not exists budgets (
 );
 
 alter table budgets add column if not exists alert_threshold_percent int not null default 80;
+alter table budgets add column if not exists account_id uuid references accounts(id) on delete cascade;
+create index if not exists idx_budgets_account_month_year on budgets(account_id, year, month);
+create unique index if not exists uq_budgets_account_cat_month_year on budgets(account_id, category_id, month, year) where account_id is not null;
 
 create table if not exists goals (
   id uuid primary key,
   user_id uuid not null references users(id) on delete cascade,
+  account_id uuid references accounts(id) on delete cascade,
   name varchar(120) not null,
   target_amount numeric(12,2) not null,
   current_amount numeric(12,2) not null default 0,
@@ -119,6 +164,8 @@ create table if not exists goals (
 
 alter table goals add column if not exists current_amount numeric(12,2) not null default 0;
 alter table goals add column if not exists status varchar(30) not null default 'active';
+alter table goals add column if not exists account_id uuid references accounts(id) on delete cascade;
+create index if not exists idx_goals_account on goals(account_id);
 
 create table if not exists recurring_transactions (
   id uuid primary key,
@@ -136,6 +183,20 @@ create table if not exists recurring_transactions (
 );
 
 alter table recurring_transactions add column if not exists auto_create_transaction boolean not null default true;
+
+create table if not exists rules (
+  id uuid primary key,
+  user_id uuid not null references users(id) on delete cascade,
+  name varchar(120) not null,
+  priority int not null default 100,
+  condition_json jsonb not null,
+  action_json jsonb not null,
+  is_active boolean not null default true,
+  created_at timestamp not null default now(),
+  updated_at timestamp not null default now()
+);
+
+create index if not exists idx_rules_user_active_priority on rules(user_id, is_active, priority);
 
 create table if not exists refresh_tokens (
   id uuid primary key,

@@ -1,6 +1,24 @@
 name: pft
 
 services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: pft_dev
+      POSTGRES_USER: pft
+      POSTGRES_PASSWORD: pft_dev
+    ports:
+      - "55432:5432"
+    volumes:
+      - pft_db_data:/var/lib/postgresql/data
+    networks:
+      - pftnet
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pft -d pft_dev"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
   backend:
     build:
       context: ../..
@@ -8,12 +26,15 @@ services:
     environment:
       ASPNETCORE_URLS: http://0.0.0.0:8080
       ASPNETCORE_ENVIRONMENT: Development
-      ConnectionStrings__Default: Host=localhost;Port=55432;Database=pft_dev;Username=pft;Password=pft_dev
+      ConnectionStrings__Default: Host=db;Port=5432;Database=pft_dev;Username=pft;Password=pft_dev
       Jwt__Issuer: pft
       Jwt__Audience: pft
       Jwt__SigningKey: CHANGE_ME_DEV_ONLY_CHANGE_ME_DEV_ONLY_32+CHARS
       Jwt__AccessTokenMinutes: "120"
       Jwt__RefreshTokenDays: "30"
+      Invites__FrontendBaseUrl: http://localhost:3000
+    depends_on:
+      - db
     ports:
       - "8080:8080"
     networks:
@@ -35,3 +56,6 @@ services:
 
 networks:
   pftnet:
+
+volumes:
+  pft_db_data:

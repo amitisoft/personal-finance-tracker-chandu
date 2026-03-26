@@ -9,7 +9,7 @@ public interface INotificationsService
     Task<IReadOnlyList<BudgetAlertNotificationDto>> GetBudgetAlertsAsync(Guid userId, int? month, int? year, CancellationToken ct);
 }
 
-public class NotificationsService(PftDbContext db) : INotificationsService
+public class NotificationsService(PftDbContext db, IAccessControlService acl) : INotificationsService
 {
     public async Task<IReadOnlyList<BudgetAlertNotificationDto>> GetBudgetAlertsAsync(Guid userId, int? month, int? year, CancellationToken ct)
     {
@@ -26,10 +26,13 @@ public class NotificationsService(PftDbContext db) : INotificationsService
 
         if (budgets.Count == 0) return Array.Empty<BudgetAlertNotificationDto>();
 
+        var accessibleAccountIds = await acl.GetAccessibleAccountIdsAsync(userId, ct);
+        if (accessibleAccountIds.Count == 0) return Array.Empty<BudgetAlertNotificationDto>();
+
         var categoryIds = budgets.Select(b => b.CategoryId).Distinct().ToList();
 
         var spentRaw = await db.Transactions.AsNoTracking()
-            .Where(t => t.UserId == userId)
+            .Where(t => accessibleAccountIds.Contains(t.AccountId) || (t.ToAccountId != null && accessibleAccountIds.Contains(t.ToAccountId.Value)))
             .Where(t => t.TransactionDate >= from && t.TransactionDate <= to)
             .Where(t => t.Type.ToLower() == "expense")
             .Where(t => t.CategoryId != null && categoryIds.Contains(t.CategoryId.Value))

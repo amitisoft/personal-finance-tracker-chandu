@@ -1,12 +1,12 @@
 import { http } from "./http";
 import type { Goal } from "./types";
 
-export async function listGoals() {
-  const res = await http.get<Goal[]>("/api/goals");
+export async function listGoals(accountId?: string) {
+  const res = await http.get<Goal[]>("/api/goals", { params: { accountId } });
   return res.data;
 }
 
-export async function createGoal(payload: { name: string; targetAmount: number; targetDate?: string | null }) {
+export async function createGoal(payload: { name: string; targetAmount: number; targetDate?: string | null; accountId?: string | null }) {
   const res = await http.post<Goal>("/api/goals", payload);
   return res.data;
 }

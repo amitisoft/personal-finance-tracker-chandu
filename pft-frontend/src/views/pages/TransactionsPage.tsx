@@ -117,6 +117,7 @@ export function TransactionsPage() {
   const [open, setOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<{ id: string; label: string } | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [ruleAlerts, setRuleAlerts] = useState<string[]>([]);
   const [form, setForm] = useState<TxFormState>(() => defaultForm());
   const [isDownloading, setIsDownloading] = useState(false);
 
@@ -199,7 +200,8 @@ export function TransactionsPage() {
       if (form.toAccountId === form.accountId) return false;
       return true;
     }
-    return !!form.categoryId;
+    // Category can be set by rules; backend will validate if it ends up missing.
+    return true;
   }, [form]);
 
   const save = useMutation({
@@ -225,9 +227,16 @@ export function TransactionsPage() {
       if (isEdit) return updateTransaction(form.id!, payload);
       return createTransaction(payload);
     },
-    onSuccess: async () => {
+    onSuccess: async (result) => {
       setOpen(false);
       setSubmitError(null);
+      if (!isEdit && result && typeof result === "object" && "ruleAlerts" in result) {
+        const alerts = (result as any).ruleAlerts as unknown;
+        if (Array.isArray(alerts) && alerts.length) {
+          setRuleAlerts(alerts.map((x) => String(x)));
+          window.setTimeout(() => setRuleAlerts([]), 12_000);
+        }
+      }
       setForm(defaultForm());
       await queryClient.invalidateQueries({ queryKey: ["transactions"] });
       await queryClient.invalidateQueries({ queryKey: ["accounts"] });
@@ -328,6 +337,19 @@ export function TransactionsPage() {
         </Alert>
       )}
 
+      {ruleAlerts.length > 0 && (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          <Typography fontWeight={800} sx={{ mb: 0.5 }}>
+            Rule alerts
+          </Typography>
+          {ruleAlerts.map((msg) => (
+            <Typography key={msg} variant="body2">
+              • {msg}
+            </Typography>
+          ))}
+        </Alert>
+      )}
+
       <Card sx={{ mb: 2 }}>
         <CardContent>
           <Stack direction={{ xs: "column", md: "row" }} spacing={1.5} alignItems={{ xs: "stretch", md: "center" }}>
@@ -390,85 +412,89 @@ export function TransactionsPage() {
 
       <Card>
         <CardContent>
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>Date</TableCell>
-                <TableCell>Merchant</TableCell>
-                <TableCell>Category</TableCell>
-                <TableCell>Account</TableCell>
-                <TableCell>Type</TableCell>
-                <TableCell align="right">Amount</TableCell>
-                <TableCell width={110} />
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {(tx.data?.items ?? []).map((transaction) => {
-                const account = accountById.get(transaction.accountId) as Account | undefined;
-                const category = categoryById.get(transaction.categoryId ?? "");
-                return (
-                  <TableRow key={transaction.id} hover>
-                    <TableCell>{formatDisplayDate(transaction.date)}</TableCell>
-                    <TableCell>{transaction.merchant ?? "-"}</TableCell>
-                    <TableCell>
-                      {transaction.type === "transfer" ? (
-                        "-"
-                      ) : category ? (
+          <Box sx={{ overflowX: "auto" }}>
+            <Table size="small" sx={{ minWidth: 840 }}>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Date</TableCell>
+                  <TableCell>Merchant</TableCell>
+                  <TableCell>Category</TableCell>
+                  <TableCell>Account</TableCell>
+                  <TableCell>Added by</TableCell>
+                  <TableCell>Type</TableCell>
+                  <TableCell align="right">Amount</TableCell>
+                  <TableCell width={110} />
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {(tx.data?.items ?? []).map((transaction) => {
+                  const account = accountById.get(transaction.accountId) as Account | undefined;
+                  const category = categoryById.get(transaction.categoryId ?? "");
+                  return (
+                    <TableRow key={transaction.id} hover>
+                      <TableCell>{formatDisplayDate(transaction.date)}</TableCell>
+                      <TableCell>{transaction.merchant ?? "-"}</TableCell>
+                      <TableCell>
+                        {transaction.type === "transfer" ? (
+                          "-"
+                        ) : category ? (
+                          <Chip
+                            size="small"
+                            icon={renderCategoryIcon(category.name, category.type, category.icon, { fontSize: "small" })}
+                            label={category.name}
+                            variant="outlined"
+                            sx={categoryChipSx(category.name)}
+                          />
+                        ) : (
+                          "-"
+                        )}
+                      </TableCell>
+                      <TableCell>{account?.name ?? "-"}</TableCell>
+                      <TableCell>{transaction.createdByDisplayName ?? "-"}</TableCell>
+                      <TableCell>
                         <Chip
                           size="small"
-                          icon={renderCategoryIcon(category.name, category.type, category.icon, { fontSize: "small" })}
-                          label={category.name}
+                          label={transaction.type}
+                          color={transaction.type === "income" ? "success" : transaction.type === "expense" ? "error" : "default"}
                           variant="outlined"
-                          sx={categoryChipSx(category.name)}
+                          sx={{ textTransform: "capitalize" }}
                         />
-                      ) : (
-                        "-"
-                      )}
-                    </TableCell>
-                    <TableCell>{account?.name ?? "-"}</TableCell>
-                    <TableCell>
-                      <Chip
-                        size="small"
-                        label={transaction.type}
-                        color={transaction.type === "income" ? "success" : transaction.type === "expense" ? "error" : "default"}
-                        variant="outlined"
-                        sx={{ textTransform: "capitalize" }}
-                      />
-                    </TableCell>
-                    <TableCell align="right">
-                      <Typography
-                        component="span"
-                        fontWeight={700}
-                        color={transaction.type === "income" ? "success.main" : transaction.type === "expense" ? "error.main" : "text.primary"}
-                      >
-                        {formatMoney(transaction.amount, account?.countryCode ?? displayCountryCode)}
-                      </Typography>
-                    </TableCell>
-                    <TableCell align="right">
-                      <IconButton size="small" onClick={() => openEdit(transaction)} aria-label="Edit transaction" sx={{ color: "text.secondary" }}>
-                        <EditIcon fontSize="small" />
-                      </IconButton>
-                      <IconButton
-                        size="small"
-                        onClick={() => setConfirmDelete({ id: transaction.id, label: transaction.merchant ?? transaction.type })}
-                        aria-label="Delete transaction"
-                        sx={{ color: "error.main" }}
-                      >
-                        <DeleteIcon fontSize="small" />
-                      </IconButton>
+                      </TableCell>
+                      <TableCell align="right">
+                        <Typography
+                          component="span"
+                          fontWeight={700}
+                          color={transaction.type === "income" ? "success.main" : transaction.type === "expense" ? "error.main" : "text.primary"}
+                        >
+                          {formatMoney(transaction.amount, account?.countryCode ?? displayCountryCode)}
+                        </Typography>
+                      </TableCell>
+                      <TableCell align="right">
+                        <IconButton size="small" onClick={() => openEdit(transaction)} aria-label="Edit transaction" sx={{ color: "text.secondary" }}>
+                          <EditIcon fontSize="small" />
+                        </IconButton>
+                        <IconButton
+                          size="small"
+                          onClick={() => setConfirmDelete({ id: transaction.id, label: transaction.merchant ?? transaction.type })}
+                          aria-label="Delete transaction"
+                          sx={{ color: "error.main" }}
+                        >
+                          <DeleteIcon fontSize="small" />
+                        </IconButton>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+                {!(tx.data?.items?.length) && (
+                  <TableRow>
+                    <TableCell colSpan={8}>
+                      <Typography color="text.secondary">No transactions found</Typography>
                     </TableCell>
                   </TableRow>
-                );
-              })}
-              {!(tx.data?.items?.length) && (
-                <TableRow>
-                  <TableCell colSpan={7}>
-                    <Typography color="text.secondary">No transactions found</Typography>
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
+                )}
+              </TableBody>
+            </Table>
+          </Box>
         </CardContent>
       </Card>
 
@@ -566,11 +592,11 @@ export function TransactionsPage() {
 
             <TextField
               select
-              required
               label="Category"
               disabled={form.type === "transfer"}
               value={form.categoryId}
               onChange={(e) => setForm((s) => ({ ...s, categoryId: e.target.value }))}
+              helperText={form.type === "transfer" ? " " : form.categoryId ? " " : "Optional if a rule auto-sets category."}
             >
               {(categories.data ?? []).map((c) => (
                 <MenuItem key={c.id} value={c.id}>

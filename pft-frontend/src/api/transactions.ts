@@ -1,5 +1,6 @@
 import { http } from "./http";
 import type { PagedResult, Transaction } from "./types";
+import { useNotificationStore } from "../store/notificationStore";
 
 export async function listTransactions(params: {
   page?: number;
@@ -37,7 +38,32 @@ export async function createTransaction(payload: {
   tags?: string[];
 }) {
   const res = await http.post<Transaction>("/api/transactions", payload);
-  return res.data;
+
+  const alertsHeader = String(res.headers?.["x-pft-rule-alerts"] ?? "").trim();
+  const appliedHeader = String(res.headers?.["x-pft-applied-rules"] ?? "").trim();
+
+  let ruleAlerts: string[] = [];
+  if (alertsHeader) {
+    try {
+      const parsed = JSON.parse(alertsHeader);
+      if (Array.isArray(parsed)) ruleAlerts = parsed.map((x) => String(x));
+    } catch {
+      ruleAlerts = [alertsHeader];
+    }
+  }
+
+  const appliedRules = appliedHeader
+    ? appliedHeader
+        .split(",")
+        .map((x) => x.trim())
+        .filter(Boolean)
+    : [];
+
+  if (ruleAlerts.length > 0) {
+    useNotificationStore.getState().addRuleAlerts(ruleAlerts);
+  }
+
+  return { transaction: res.data, ruleAlerts, appliedRules };
 }
 
 export async function updateTransaction(

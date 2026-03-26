@@ -6,12 +6,14 @@ import {
   Card,
   CardContent,
   Chip,
+  Divider,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
   Grid,
   IconButton,
+  LinearProgress,
   MenuItem,
   Stack,
   TextField,
@@ -19,10 +21,11 @@ import {
 } from "@mui/material";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
+import GroupIcon from "@mui/icons-material/Group";
 import PublicRoundedIcon from "@mui/icons-material/PublicRounded";
 import AccountBalanceWalletRoundedIcon from "@mui/icons-material/AccountBalanceWalletRounded";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { createAccount, deleteAccount, listAccounts, updateAccount } from "../../api/accounts";
+import { createAccount, deleteAccount, getAccountActivity, getAccountMembers, inviteAccountMember, listAccounts, updateAccount, updateAccountMemberRole } from "../../api/accounts";
 import { queryClient } from "../../queryClient";
 import type { Account } from "../../api/types";
 import { countryOptions, getCountryOption } from "../../utils/countries";
@@ -62,6 +65,11 @@ export function AccountsPage() {
   const accounts = useQuery({ queryKey: ["accounts"], queryFn: listAccounts });
   const [open, setOpen] = useState(false);
   const [confirm, setConfirm] = useState<{ id: string; name: string } | null>(null);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareAccount, setShareAccount] = useState<Account | null>(null);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState<"viewer" | "editor">("viewer");
+  const [inviteDevToken, setInviteDevToken] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(() => defaultForm());
 
@@ -131,6 +139,51 @@ export function AccountsPage() {
     setOpen(true);
   };
 
+  const members = useQuery({
+    queryKey: ["accounts", shareAccount?.id, "members"],
+    queryFn: () => getAccountMembers(shareAccount!.id),
+    enabled: !!shareAccount?.id && shareOpen,
+  });
+
+  const activity = useQuery({
+    queryKey: ["accounts", shareAccount?.id, "activity"],
+    queryFn: () => getAccountActivity(shareAccount!.id, { limit: 50 }),
+    enabled: !!shareAccount?.id && shareOpen,
+  });
+
+  const invite = useMutation({
+    mutationFn: async () => {
+      setInviteDevToken(null);
+      return inviteAccountMember(shareAccount!.id, { email: inviteEmail.trim(), role: inviteRole });
+    },
+    onSuccess: async (res) => {
+      setInviteDevToken(res?.devInviteToken ? String(res.devInviteToken) : null);
+      setInviteEmail("");
+      await queryClient.invalidateQueries({ queryKey: ["accounts", shareAccount?.id, "members"] });
+    },
+    onError: (e) => setSubmitError(errorMessage(e)),
+  });
+
+  const changeRole = useMutation({
+    mutationFn: async (payload: { userId: string; role: "viewer" | "editor" | "owner" }) => {
+      await updateAccountMemberRole(shareAccount!.id, payload.userId, { role: payload.role });
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["accounts", shareAccount?.id, "members"] });
+      await queryClient.invalidateQueries({ queryKey: ["accounts"] });
+    },
+    onError: (e) => setSubmitError(errorMessage(e)),
+  });
+
+  const openShare = (a: Account) => {
+    setSubmitError(null);
+    setInviteDevToken(null);
+    setInviteEmail("");
+    setInviteRole("viewer");
+    setShareAccount(a);
+    setShareOpen(true);
+  };
+
   return (
     <Box>
       <PageHero
@@ -177,6 +230,7 @@ export function AccountsPage() {
       <Grid container spacing={2}>
         {(accounts.data ?? []).map((account) => {
           const country = getCountryOption(account.countryCode);
+          const isOwner = account.isOwner ?? true;
           return (
             <Grid item xs={12} md={6} lg={4} key={account.id}>
               <Card sx={{ height: "100%" }}>
@@ -190,15 +244,23 @@ export function AccountsPage() {
                       <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
                         <Chip size="small" label={account.type} sx={{ textTransform: "capitalize" }} />
                         <Chip size="small" icon={<PublicRoundedIcon />} label={country.label} />
+                        {!isOwner && <Chip size="small" label="Shared" color="info" variant="outlined" />}
                       </Stack>
                     </Stack>
                     <Stack direction="row" spacing={0.5}>
-                      <IconButton size="small" onClick={() => openEdit(account)} aria-label="Edit account">
-                        <EditIcon fontSize="small" />
+                      <IconButton size="small" onClick={() => openShare(account)} aria-label="Shared with">
+                        <GroupIcon fontSize="small" />
                       </IconButton>
-                      <IconButton size="small" onClick={() => setConfirm({ id: account.id, name: account.name })} aria-label="Delete account" sx={{ color: "error.main" }}>
-                        <DeleteIcon fontSize="small" />
-                      </IconButton>
+                      {isOwner && (
+                        <>
+                          <IconButton size="small" onClick={() => openEdit(account)} aria-label="Edit account">
+                            <EditIcon fontSize="small" />
+                          </IconButton>
+                          <IconButton size="small" onClick={() => setConfirm({ id: account.id, name: account.name })} aria-label="Delete account" sx={{ color: "error.main" }}>
+                            <DeleteIcon fontSize="small" />
+                          </IconButton>
+                        </>
+                      )}
                     </Stack>
                   </Stack>
 
@@ -300,6 +362,208 @@ export function AccountsPage() {
           <Button color="error" variant="contained" onClick={() => del.mutate()} disabled={del.isPending}>
             {del.isPending ? "Deleting..." : "Delete"}
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={shareOpen} onClose={() => setShareOpen(false)} fullWidth maxWidth="sm">
+        <DialogTitle>Shared with</DialogTitle>
+        <DialogContent>
+          {members.isPending && <LinearProgress sx={{ mb: 2, borderRadius: 999 }} />}
+          {members.error && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {errorMessage(members.error)}
+            </Alert>
+          )}
+
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <Typography fontWeight={900}>{shareAccount?.name ?? "Account"}</Typography>
+            <Typography variant="body2" color="text.secondary">
+              Invite family members to view or edit transactions.
+            </Typography>
+
+            <Divider />
+
+            {members.data?.access?.isOwner && (
+              <Card variant="outlined">
+                <CardContent>
+                  <Typography fontWeight={900} sx={{ mb: 1 }}>
+                    Invite member
+                  </Typography>
+                  <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
+                    <TextField
+                      label="Email"
+                      value={inviteEmail}
+                      onChange={(e) => setInviteEmail(e.target.value)}
+                      placeholder="person@example.com"
+                      fullWidth
+                    />
+                    <TextField
+                      select
+                      label="Role"
+                      value={inviteRole}
+                      onChange={(e) => setInviteRole(e.target.value as any)}
+                      sx={{ minWidth: 160 }}
+                    >
+                      <MenuItem value="viewer">Viewer</MenuItem>
+                      <MenuItem value="editor">Editor</MenuItem>
+                    </TextField>
+                    <Button
+                      variant="contained"
+                      disabled={!inviteEmail.trim() || invite.isPending}
+                      onClick={() => {
+                        setSubmitError(null);
+                        invite.mutate();
+                      }}
+                    >
+                      {invite.isPending ? "Inviting..." : "Invite"}
+                    </Button>
+                  </Stack>
+                  {inviteDevToken && (
+                    <Alert severity="info" sx={{ mt: 1.5 }}>
+                      Dev invite token (email not sent):{" "}
+                      <Typography component="span" fontWeight={800}>
+                        {inviteDevToken}
+                      </Typography>
+                      <Box sx={{ mt: 0.5 }}>
+                        <Typography variant="body2" color="text.secondary">
+                          Accept URL:{" "}
+                          <Typography
+                            component="a"
+                            href={`${window.location.origin}/accept-invite?token=${encodeURIComponent(inviteDevToken)}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            style={{ color: "inherit" }}
+                          >
+                            {window.location.origin}/accept-invite?token={inviteDevToken}
+                          </Typography>
+                        </Typography>
+                      </Box>
+                    </Alert>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            <Card variant="outlined">
+              <CardContent>
+                <Typography fontWeight={900} sx={{ mb: 1.5 }}>
+                  Members
+                </Typography>
+                {(members.data?.members ?? []).map((m) => (
+                  <Stack
+                    key={m.userId}
+                    direction={{ xs: "column", sm: "row" }}
+                    justifyContent="space-between"
+                    alignItems={{ xs: "stretch", sm: "center" }}
+                    spacing={1.25}
+                    sx={{ py: 1, borderTop: "1px solid rgba(15,23,42,0.08)" }}
+                  >
+                    <Box sx={{ minWidth: 0 }}>
+                      <Typography fontWeight={800} noWrap>
+                        {m.displayName?.trim() || m.email}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary" noWrap>
+                        {m.email}
+                      </Typography>
+                    </Box>
+
+                    <Stack direction="row" spacing={1} alignItems="center" justifyContent="flex-end">
+                      <Chip size="small" label={m.role} variant="outlined" />
+                      {members.data?.access?.isOwner && !m.isOwner && (
+                        <TextField
+                          select
+                          size="small"
+                          value={m.role}
+                          onChange={(e) =>
+                            changeRole.mutate({ userId: m.userId, role: e.target.value as any })
+                          }
+                          sx={{ minWidth: 140 }}
+                        >
+                          <MenuItem value="viewer">Viewer</MenuItem>
+                          <MenuItem value="editor">Editor</MenuItem>
+                          <MenuItem value="owner">Owner</MenuItem>
+                        </TextField>
+                      )}
+                    </Stack>
+                  </Stack>
+                ))}
+
+                {(members.data?.members ?? []).length === 0 && <Alert severity="info">No members yet.</Alert>}
+              </CardContent>
+            </Card>
+
+            {(members.data?.invites ?? []).length > 0 && (
+              <Card variant="outlined">
+                <CardContent>
+                  <Typography fontWeight={900} sx={{ mb: 1.5 }}>
+                    Pending invites
+                  </Typography>
+                  {(members.data?.invites ?? []).map((inv) => (
+                    <Stack
+                      key={inv.id}
+                      direction={{ xs: "column", sm: "row" }}
+                      justifyContent="space-between"
+                      alignItems={{ xs: "stretch", sm: "center" }}
+                      spacing={1.25}
+                      sx={{ py: 1, borderTop: "1px solid rgba(15,23,42,0.08)" }}
+                    >
+                      <Box sx={{ minWidth: 0 }}>
+                        <Typography fontWeight={800} noWrap>
+                          {inv.email}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" noWrap>
+                          Expires: {inv.expiresAtUtc}
+                        </Typography>
+                      </Box>
+                      <Chip size="small" label={inv.role} variant="outlined" />
+                    </Stack>
+                  ))}
+                </CardContent>
+              </Card>
+            )}
+
+            <Card variant="outlined">
+              <CardContent>
+                <Typography fontWeight={900} sx={{ mb: 1.5 }}>
+                  Activity
+                </Typography>
+                {activity.isPending && <LinearProgress sx={{ mb: 2, borderRadius: 999 }} />}
+                {activity.error && (
+                  <Alert severity="error" sx={{ mb: 2 }}>
+                    {errorMessage(activity.error)}
+                  </Alert>
+                )}
+
+                {(activity.data ?? []).map((ev) => (
+                  <Stack
+                    key={ev.id}
+                    direction={{ xs: "column", sm: "row" }}
+                    justifyContent="space-between"
+                    alignItems={{ xs: "stretch", sm: "center" }}
+                    spacing={1.25}
+                    sx={{ py: 1, borderTop: "1px solid rgba(15,23,42,0.08)" }}
+                  >
+                    <Box sx={{ minWidth: 0 }}>
+                      <Typography fontWeight={800} noWrap>
+                        {(ev.actorDisplayName?.trim() || ev.actorEmail) ?? "User"}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary" noWrap>
+                        {String(ev.action ?? "").replaceAll("_", " ")} · {new Date(ev.createdAtUtc).toLocaleString()}
+                      </Typography>
+                    </Box>
+                    <Chip size="small" label={ev.entityType} variant="outlined" />
+                  </Stack>
+                ))}
+
+                {(activity.data ?? []).length === 0 && !activity.isPending && (
+                  <Alert severity="info">No activity yet.</Alert>
+                )}
+              </CardContent>
+            </Card>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShareOpen(false)}>Close</Button>
         </DialogActions>
       </Dialog>
     </Box>

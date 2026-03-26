@@ -7,11 +7,15 @@ public class PftDbContext(DbContextOptions<PftDbContext> options) : DbContext(op
 {
     public DbSet<User> Users => Set<User>();
     public DbSet<Account> Accounts => Set<Account>();
+    public DbSet<AccountMember> AccountMembers => Set<AccountMember>();
+    public DbSet<AccountInvite> AccountInvites => Set<AccountInvite>();
     public DbSet<Category> Categories => Set<Category>();
     public DbSet<Transaction> Transactions => Set<Transaction>();
+    public DbSet<ActivityLog> ActivityLogs => Set<ActivityLog>();
     public DbSet<Budget> Budgets => Set<Budget>();
     public DbSet<Goal> Goals => Set<Goal>();
     public DbSet<RecurringTransaction> RecurringTransactions => Set<RecurringTransaction>();
+    public DbSet<Rule> Rules => Set<Rule>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
 
@@ -45,6 +49,41 @@ public class PftDbContext(DbContextOptions<PftDbContext> options) : DbContext(op
             b.Property(x => x.InstitutionName).HasColumnName("institution_name").HasMaxLength(120);
             b.Property(x => x.CreatedAt).HasColumnName("created_at");
             b.HasOne<User>().WithMany().HasForeignKey(x => x.UserId);
+        });
+
+        modelBuilder.Entity<AccountMember>(b =>
+        {
+            b.ToTable("account_members");
+            b.HasKey(x => x.Id);
+            b.Property(x => x.Id).HasColumnName("id");
+            b.Property(x => x.AccountId).HasColumnName("account_id");
+            b.Property(x => x.UserId).HasColumnName("user_id");
+            b.Property(x => x.Role).HasColumnName("role").HasMaxLength(10).IsRequired();
+            b.Property(x => x.CreatedAt).HasColumnName("created_at");
+            b.HasOne<Account>().WithMany().HasForeignKey(x => x.AccountId);
+            b.HasOne<User>().WithMany().HasForeignKey(x => x.UserId);
+            b.HasIndex(x => new { x.AccountId, x.UserId }).IsUnique();
+            b.HasIndex(x => new { x.UserId, x.Role });
+        });
+
+        modelBuilder.Entity<AccountInvite>(b =>
+        {
+            b.ToTable("account_invites");
+            b.HasKey(x => x.Id);
+            b.Property(x => x.Id).HasColumnName("id");
+            b.Property(x => x.AccountId).HasColumnName("account_id");
+            b.Property(x => x.InvitedByUserId).HasColumnName("invited_by_user_id");
+            b.Property(x => x.Email).HasColumnName("email").HasMaxLength(255).IsRequired();
+            b.Property(x => x.Role).HasColumnName("role").HasMaxLength(10).IsRequired();
+            b.Property(x => x.TokenHash).HasColumnName("token_hash").HasMaxLength(128).IsRequired();
+            b.Property(x => x.ExpiresAt).HasColumnName("expires_at");
+            b.Property(x => x.CreatedAt).HasColumnName("created_at");
+            b.Property(x => x.AcceptedAt).HasColumnName("accepted_at");
+            b.Property(x => x.RevokedAt).HasColumnName("revoked_at");
+            b.HasOne<Account>().WithMany().HasForeignKey(x => x.AccountId);
+            b.HasOne<User>().WithMany().HasForeignKey(x => x.InvitedByUserId);
+            b.HasIndex(x => new { x.AccountId, x.Email });
+            b.HasIndex(x => x.TokenHash).IsUnique();
         });
 
         modelBuilder.Entity<Category>(b =>
@@ -85,18 +124,37 @@ public class PftDbContext(DbContextOptions<PftDbContext> options) : DbContext(op
             b.HasOne<Category>().WithMany().HasForeignKey(x => x.CategoryId);
         });
 
+        modelBuilder.Entity<ActivityLog>(b =>
+        {
+            b.ToTable("activity_logs");
+            b.HasKey(x => x.Id);
+            b.Property(x => x.Id).HasColumnName("id");
+            b.Property(x => x.AccountId).HasColumnName("account_id");
+            b.Property(x => x.ActorUserId).HasColumnName("actor_user_id");
+            b.Property(x => x.Action).HasColumnName("action").HasMaxLength(50).IsRequired();
+            b.Property(x => x.EntityType).HasColumnName("entity_type").HasMaxLength(50).IsRequired();
+            b.Property(x => x.EntityId).HasColumnName("entity_id");
+            b.Property(x => x.DetailsJson).HasColumnName("details_json").HasColumnType("jsonb");
+            b.Property(x => x.CreatedAt).HasColumnName("created_at");
+            b.HasOne<Account>().WithMany().HasForeignKey(x => x.AccountId);
+            b.HasOne<User>().WithMany().HasForeignKey(x => x.ActorUserId);
+            b.HasIndex(x => new { x.AccountId, x.CreatedAt });
+        });
+
         modelBuilder.Entity<Budget>(b =>
         {
             b.ToTable("budgets");
             b.HasKey(x => x.Id);
             b.Property(x => x.Id).HasColumnName("id");
             b.Property(x => x.UserId).HasColumnName("user_id");
+            b.Property(x => x.AccountId).HasColumnName("account_id");
             b.Property(x => x.CategoryId).HasColumnName("category_id");
             b.Property(x => x.Month).HasColumnName("month");
             b.Property(x => x.Year).HasColumnName("year");
             b.Property(x => x.Amount).HasColumnName("amount").HasPrecision(12, 2);
             b.Property(x => x.AlertThresholdPercent).HasColumnName("alert_threshold_percent");
             b.HasOne<User>().WithMany().HasForeignKey(x => x.UserId);
+            b.HasOne<Account>().WithMany().HasForeignKey(x => x.AccountId);
             b.HasOne<Category>().WithMany().HasForeignKey(x => x.CategoryId);
             b.HasIndex(x => new { x.UserId, x.CategoryId, x.Month, x.Year }).IsUnique();
         });
@@ -107,12 +165,14 @@ public class PftDbContext(DbContextOptions<PftDbContext> options) : DbContext(op
             b.HasKey(x => x.Id);
             b.Property(x => x.Id).HasColumnName("id");
             b.Property(x => x.UserId).HasColumnName("user_id");
+            b.Property(x => x.AccountId).HasColumnName("account_id");
             b.Property(x => x.Name).HasColumnName("name").HasMaxLength(120).IsRequired();
             b.Property(x => x.TargetAmount).HasColumnName("target_amount").HasPrecision(12, 2);
             b.Property(x => x.CurrentAmount).HasColumnName("current_amount").HasPrecision(12, 2);
             b.Property(x => x.TargetDate).HasColumnName("target_date");
             b.Property(x => x.Status).HasColumnName("status").HasMaxLength(30);
             b.HasOne<User>().WithMany().HasForeignKey(x => x.UserId);
+            b.HasOne<Account>().WithMany().HasForeignKey(x => x.AccountId);
         });
 
         modelBuilder.Entity<RecurringTransaction>(b =>
@@ -134,6 +194,23 @@ public class PftDbContext(DbContextOptions<PftDbContext> options) : DbContext(op
             b.HasOne<User>().WithMany().HasForeignKey(x => x.UserId);
             b.HasOne<Account>().WithMany().HasForeignKey(x => x.AccountId);
             b.HasOne<Category>().WithMany().HasForeignKey(x => x.CategoryId);
+        });
+
+        modelBuilder.Entity<Rule>(b =>
+        {
+            b.ToTable("rules");
+            b.HasKey(x => x.Id);
+            b.Property(x => x.Id).HasColumnName("id");
+            b.Property(x => x.UserId).HasColumnName("user_id");
+            b.Property(x => x.Name).HasColumnName("name").HasMaxLength(120).IsRequired();
+            b.Property(x => x.Priority).HasColumnName("priority");
+            b.Property(x => x.ConditionJson).HasColumnName("condition_json").HasColumnType("jsonb").IsRequired();
+            b.Property(x => x.ActionJson).HasColumnName("action_json").HasColumnType("jsonb").IsRequired();
+            b.Property(x => x.IsActive).HasColumnName("is_active");
+            b.Property(x => x.CreatedAt).HasColumnName("created_at");
+            b.Property(x => x.UpdatedAt).HasColumnName("updated_at");
+            b.HasOne<User>().WithMany().HasForeignKey(x => x.UserId);
+            b.HasIndex(x => new { x.UserId, x.IsActive, x.Priority });
         });
 
         modelBuilder.Entity<RefreshToken>(b =>

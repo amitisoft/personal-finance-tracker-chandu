@@ -63,6 +63,51 @@ public class ReportsController(
         }
     }
 
+    [HttpGet("trends")]
+    public async Task<ActionResult<TrendsReportDto>> Trends(
+        [FromQuery] DateOnly? from = null,
+        [FromQuery] DateOnly? to = null,
+        [FromQuery] Guid? accountId = null,
+        [FromQuery] Guid? categoryId = null,
+        CancellationToken ct = default)
+    {
+        var userId = currentUser.UserId;
+        if (userId == Guid.Empty) return Unauthorized();
+
+        try
+        {
+            var (f, t) = DefaultRange(from, to);
+            var dto = await reports.GetTrendsAsync(userId, f, t, accountId, categoryId, ct);
+            return Ok(dto);
+        }
+        catch (Exception ex)
+        {
+            return HandleQueryFailure(ex, "trends");
+        }
+    }
+
+    [HttpGet("net-worth")]
+    public async Task<ActionResult<NetWorthReportDto>> NetWorth(
+        [FromQuery] DateOnly? from = null,
+        [FromQuery] DateOnly? to = null,
+        [FromQuery] Guid? accountId = null,
+        CancellationToken ct = default)
+    {
+        var userId = currentUser.UserId;
+        if (userId == Guid.Empty) return Unauthorized();
+
+        try
+        {
+            var (f, t) = DefaultRange(from, to);
+            var dto = await reports.GetNetWorthAsync(userId, f, t, accountId, ct);
+            return Ok(dto);
+        }
+        catch (Exception ex)
+        {
+            return HandleQueryFailure(ex, "net worth");
+        }
+    }
+
     [HttpGet("account-balance-trend")]
     public async Task<ActionResult<IReadOnlyList<AccountBalanceTrendPoint>>> AccountBalanceTrend(
         [FromQuery] Guid accountId,
