@@ -286,25 +286,25 @@ export function AppShell({ children }: Props) {
             top: 0,
             zIndex: 10,
             minHeight: 76,
-            px: { xs: 2, md: 3 },
-            py: 1.5,
+            px: { xs: 1.5, sm: 2, md: 3 },
+            py: { xs: 1.25, md: 1.5 },
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
-            gap: 2,
+            gap: { xs: 1, sm: 2 },
             borderBottom: "1px solid rgba(15,23,42,0.06)",
             bgcolor: "rgba(255,255,255,0.68)",
             backdropFilter: "blur(16px)",
           }}
         >
-          <Stack direction="row" spacing={1.5} alignItems="center" sx={{ flex: 1, minWidth: 0 }}>
+          <Stack direction="row" spacing={{ xs: 1, sm: 1.5 }} alignItems="center" sx={{ flex: 1, minWidth: 0 }}>
             {isMobile && (
               <IconButton color="inherit" edge="start" onClick={() => setMobileOpen(true)}>
                 <MenuIcon />
               </IconButton>
             )}
             <TextField
-              placeholder="Search transactions by merchant"
+              placeholder={isMobile ? "Search transactions" : "Search transactions by merchant"}
               value={searchText}
               onChange={(event) => setSearchText(event.target.value)}
               onKeyDown={(event) => {
@@ -320,6 +320,7 @@ export function AppShell({ children }: Props) {
               }}
               sx={{
                 maxWidth: 980,
+                minWidth: 0,
                 "& .MuiOutlinedInput-root": {
                   bgcolor: "rgba(255,255,255,0.9)",
                   boxShadow: "0px 12px 30px rgba(15, 23, 42, 0.05)",
@@ -328,7 +329,7 @@ export function AppShell({ children }: Props) {
             />
           </Stack>
 
-          <Stack direction="row" spacing={1} alignItems="center">
+          <Stack direction="row" spacing={{ xs: 0.75, sm: 1 }} alignItems="center" sx={{ flexShrink: 0 }}>
             <Tooltip title={alertCount ? `${alertCount} notification${alertCount === 1 ? "" : "s"}` : "No alerts"}>
               <IconButton
                 aria-label="Notifications"

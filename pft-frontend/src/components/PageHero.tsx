@@ -38,14 +38,14 @@ export function PageHero({ title, description, actions }: PageHeroProps) {
         },
       }}
     >
-      <CardContent sx={{ py: 3, position: "relative", zIndex: 1 }}>
+      <CardContent sx={{ py: 3, position: "relative", zIndex: 1, overflow: "hidden" }}>
         <Stack
           direction={{ xs: "column", md: "row" }}
           justifyContent="space-between"
           alignItems={{ xs: "stretch", md: "center" }}
           spacing={2.5}
         >
-          <Box sx={{ maxWidth: 820 }}>
+          <Box sx={{ maxWidth: 820, minWidth: 0 }}>
             <Typography
               sx={{
                 display: "inline-flex",
@@ -72,13 +72,22 @@ export function PageHero({ title, description, actions }: PageHeroProps) {
           {actions ? (
             <Box
               sx={{
-                flexShrink: 0,
+                flexShrink: { xs: 1, md: 0 },
                 alignSelf: { xs: "stretch", md: "center" },
+                minWidth: 0,
+                maxWidth: "100%",
+                width: { xs: "100%", md: "auto" },
                 p: { xs: 0, md: 1 },
                 borderRadius: 4,
                 bgcolor: { xs: "transparent", md: "rgba(255,255,255,0.46)" },
                 border: { xs: "none", md: "1px solid rgba(255,255,255,0.66)" },
                 backdropFilter: { xs: "none", md: "blur(12px)" },
+                overflowX: { xs: "auto", md: "visible" },
+                overflowY: "hidden",
+                WebkitOverflowScrolling: "touch",
+                "& > *": {
+                  minWidth: 0,
+                },
               }}
             >
               {actions}

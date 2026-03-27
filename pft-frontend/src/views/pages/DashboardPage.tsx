@@ -118,6 +118,12 @@ function KpiCard({ title, value, caption, accent, icon }: KpiCardProps) {
   );
 }
 
+function formatForecastAxisLabel(value: string, mobile: boolean) {
+  const [month, day] = value.split("-");
+  if (!month || !day) return value;
+  return mobile ? day : `${month}-${day}`;
+}
+
 export function DashboardPage() {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
@@ -266,6 +272,7 @@ export function DashboardPage() {
 
   const forecastPoints = (dailyForecast.data?.points ?? []).map((p) => ({
     date: p.date.slice(5),
+    shortDate: formatForecastAxisLabel(p.date.slice(5), isMobile),
     balance: p.projectedBalance,
   }));
 
@@ -459,13 +466,19 @@ export function DashboardPage() {
 
               <Box sx={{ height: 260 }}>
                 <ResponsiveContainer>
-                  <LineChart data={forecastPoints}>
+                  <LineChart data={forecastPoints} margin={{ top: 8, right: isMobile ? 4 : 12, left: isMobile ? -18 : 0, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="rgba(15,23,42,0.10)" />
-                    <XAxis dataKey="date" tickLine={false} axisLine={false} />
+                    <XAxis
+                      dataKey={isMobile ? "shortDate" : "date"}
+                      tickLine={false}
+                      axisLine={false}
+                      interval={isMobile ? "preserveStartEnd" : 0}
+                      minTickGap={isMobile ? 18 : 8}
+                    />
                     <YAxis
                       tickLine={false}
                       axisLine={false}
-                      width={110}
+                      width={isMobile ? 76 : 110}
                       tickFormatter={(value) => formatMoney(Number(value), primaryCountryCode)}
                     />
                     <Tooltip

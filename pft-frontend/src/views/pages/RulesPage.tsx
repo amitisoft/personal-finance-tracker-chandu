@@ -357,63 +357,65 @@ export function RulesPage() {
           </Alert>
           <Divider sx={{ mb: 2 }} />
 
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>Rule</TableCell>
-                <TableCell>Condition</TableCell>
-                <TableCell>Action</TableCell>
-                <TableCell>Priority</TableCell>
-                <TableCell>Status</TableCell>
-                <TableCell align="right">Manage</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {(rules.data ?? []).map((r) => (
-                <TableRow key={r.id} hover>
-                  <TableCell sx={{ fontWeight: 800 }}>{r.name}</TableCell>
-                  <TableCell>
-                    <Typography variant="body2" color="text.secondary">
-                      {formatCondition(r, categoriesList, accountsList)}
-                    </Typography>
-                  </TableCell>
-                  <TableCell>
-                    <Typography variant="body2" color="text.secondary">
-                      {formatAction(r, categoriesList)}
-                    </Typography>
-                  </TableCell>
-                  <TableCell>{r.priority}</TableCell>
-                  <TableCell>
-                    <Stack direction="row" spacing={1} alignItems="center">
-                      <Chip size="small" label={r.isActive ? "Enabled" : "Disabled"} color={r.isActive ? "success" : "default"} variant="outlined" />
-                      <Switch
-                        checked={r.isActive}
-                        onChange={() => toggleActive.mutate(r)}
-                        size="small"
-                        inputProps={{ "aria-label": `toggle ${r.name}` }}
-                      />
-                    </Stack>
-                  </TableCell>
-                  <TableCell align="right">
-                    <IconButton onClick={() => openEdit(r)} size="small" aria-label={`edit ${r.name}`}>
-                      <EditIcon fontSize="small" />
-                    </IconButton>
-                    <IconButton onClick={() => setConfirmDelete(r)} size="small" aria-label={`delete ${r.name}`}>
-                      <DeleteIcon fontSize="small" />
-                    </IconButton>
-                  </TableCell>
-                </TableRow>
-              ))}
-
-              {(rules.data ?? []).length === 0 && (
+          <Box sx={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+            <Table size="small" sx={{ minWidth: 760 }}>
+              <TableHead>
                 <TableRow>
-                  <TableCell colSpan={6}>
-                    <Alert severity="info">No rules yet. Create one to auto-categorize merchants or trigger alerts.</Alert>
-                  </TableCell>
+                  <TableCell>Rule</TableCell>
+                  <TableCell>Condition</TableCell>
+                  <TableCell>Action</TableCell>
+                  <TableCell>Priority</TableCell>
+                  <TableCell>Status</TableCell>
+                  <TableCell align="right">Manage</TableCell>
                 </TableRow>
-              )}
-            </TableBody>
-          </Table>
+              </TableHead>
+              <TableBody>
+                {(rules.data ?? []).map((r) => (
+                  <TableRow key={r.id} hover>
+                    <TableCell sx={{ fontWeight: 800 }}>{r.name}</TableCell>
+                    <TableCell>
+                      <Typography variant="body2" color="text.secondary">
+                        {formatCondition(r, categoriesList, accountsList)}
+                      </Typography>
+                    </TableCell>
+                    <TableCell>
+                      <Typography variant="body2" color="text.secondary">
+                        {formatAction(r, categoriesList)}
+                      </Typography>
+                    </TableCell>
+                    <TableCell>{r.priority}</TableCell>
+                    <TableCell>
+                      <Stack direction="row" spacing={1} alignItems="center">
+                        <Chip size="small" label={r.isActive ? "Enabled" : "Disabled"} color={r.isActive ? "success" : "default"} variant="outlined" />
+                        <Switch
+                          checked={r.isActive}
+                          onChange={() => toggleActive.mutate(r)}
+                          size="small"
+                          inputProps={{ "aria-label": `toggle ${r.name}` }}
+                        />
+                      </Stack>
+                    </TableCell>
+                    <TableCell align="right">
+                      <IconButton onClick={() => openEdit(r)} size="small" aria-label={`edit ${r.name}`}>
+                        <EditIcon fontSize="small" />
+                      </IconButton>
+                      <IconButton onClick={() => setConfirmDelete(r)} size="small" aria-label={`delete ${r.name}`}>
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </TableCell>
+                  </TableRow>
+                ))}
+
+                {(rules.data ?? []).length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={6}>
+                      <Alert severity="info">No rules yet. Create one to auto-categorize merchants or trigger alerts.</Alert>
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </Box>
         </CardContent>
       </Card>
 

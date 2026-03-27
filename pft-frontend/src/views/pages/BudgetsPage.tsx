@@ -164,14 +164,25 @@ export function BudgetsPage() {
         title="Budgets"
         description="Set monthly budgets and review category performance as cards."
         actions={
-          <Stack direction="row" spacing={1.5} alignItems="center" justifyContent="flex-end">
+          <Stack
+            direction="row"
+            spacing={1.25}
+            alignItems="center"
+            justifyContent={{ xs: "flex-start", md: "flex-end" }}
+            flexWrap={{ xs: "nowrap", md: "wrap" }}
+            sx={{
+              width: "max-content",
+              minWidth: { xs: 0, md: "auto" },
+              pr: { xs: 0.5, md: 0 },
+            }}
+          >
             <TextField
               select
               size="small"
               label="Scope"
               value={accountId}
               onChange={(e) => setAccountId(e.target.value)}
-              sx={{ minWidth: 180 }}
+              sx={{ minWidth: { xs: 156, sm: 180 } }}
             >
               <MenuItem value="">Personal</MenuItem>
               {(accounts.data ?? []).map((a) => (
@@ -180,21 +191,35 @@ export function BudgetsPage() {
                 </MenuItem>
               ))}
             </TextField>
-            <TextField select size="small" label="Month" value={month} onChange={(e) => setMonth(Number(e.target.value))} sx={{ minWidth: 130 }}>
+            <TextField
+              select
+              size="small"
+              label="Month"
+              value={month}
+              onChange={(e) => setMonth(Number(e.target.value))}
+              sx={{ minWidth: { xs: 108, sm: 130 } }}
+            >
               {monthOptions.map((m) => (
                 <MenuItem key={m} value={m}>
                   {m}
                 </MenuItem>
               ))}
             </TextField>
-            <TextField select size="small" label="Year" value={year} onChange={(e) => setYear(Number(e.target.value))} sx={{ minWidth: 130 }}>
+            <TextField
+              select
+              size="small"
+              label="Year"
+              value={year}
+              onChange={(e) => setYear(Number(e.target.value))}
+              sx={{ minWidth: { xs: 108, sm: 130 } }}
+            >
               {yearOptions.map((y) => (
                 <MenuItem key={y} value={y}>
                   {y}
                 </MenuItem>
               ))}
             </TextField>
-            <Button variant="contained" onClick={openAdd}>
+            <Button variant="contained" onClick={openAdd} sx={{ flexShrink: 0 }}>
               Set Budget
             </Button>
           </Stack>
