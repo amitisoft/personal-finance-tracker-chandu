@@ -20,6 +20,8 @@ Deploy `pft-frontend` as its own Azure-hosted app.
 ## Azure Static Web Apps
 - Build with the same `VITE_API_BASE_URL`
 - Publish the `dist/` output if you are not deploying the container image
+- Ensure `staticwebapp.config.json` is included in the deployed output so deep links like `/dashboard` rewrite to `index.html`
+- In this repo the file is provided at `pft-frontend/public/staticwebapp.config.json`, and Vite copies it into `dist/` during build
 
 ## Validation
 - Frontend: `https://<your-frontend-host>/`

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { useMutation } from "@tanstack/react-query";
-import { Link as RouterLink, useNavigate } from "react-router-dom";
+import { Link as RouterLink, useLocation, useNavigate } from "react-router-dom";
 import { Alert, Box, Button, Link, Stack, TextField, Typography } from "@mui/material";
 import { login } from "../../api/auth";
 import { AuthLayout } from "../../components/AuthLayout";
@@ -34,7 +34,13 @@ function errorMessage(err: unknown) {
 
 export function LoginPage() {
   const nav = useNavigate();
+  const loc = useLocation();
   const setSession = useAuthStore((s) => s.setSession);
+  const redirectTo =
+    typeof (loc.state as { from?: unknown } | null)?.from === "string" &&
+    (loc.state as { from?: string }).from!.startsWith("/")
+      ? (loc.state as { from?: string }).from!
+      : "/dashboard";
   const { register, handleSubmit, setError, formState } = useForm<Form>({
     defaultValues: { email: "", password: "" },
   });
@@ -43,7 +49,7 @@ export function LoginPage() {
     mutationFn: (data: Form) => login(data),
     onSuccess: (res) => {
       setSession(res.accessToken, res.refreshToken, res.user);
-      nav("/dashboard", { replace: true });
+      nav(redirectTo, { replace: true });
     },
     onError: (e) => {
       const msg = errorMessage(e);
